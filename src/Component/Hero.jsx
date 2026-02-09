@@ -1,0 +1,139 @@
+import { Link } from "react-router-dom";
+
+const logos = [
+  "Accountant",
+  "Audit",
+  "Finance",
+  "Technology",
+  "Data Domain",
+  "Business Setup",
+  "Human Resource",
+];
+
+export default function Hero() {
+  return (
+    <main className="page-shell min-h-screen overflow-hidden hero-enter pt-24">
+      <section className="mx-auto grid max-w-7xl gap-12 px-8 pb-12 pt-10 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="flex flex-col justify-center gap-10 lg:-mt-1">
+          <h1 className="text-[48px] font-semibold leading-[1.08] text-[#1f2937] sm:text-[62px]">
+            Fastest way to hire talent and land your Next role
+          </h1>
+          <p className="max-w-xl text-[18px] leading-8 text-[#5b6470] sm:text-[20px]">
+            Connect employers with standout
+            <br />
+            Candidates through curated, pre-vetted
+            <br />
+            hiring — not messy job boards.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-4 pt-2">
+            <Link
+              to="/employers"
+              className="min-w-[190px] rounded-full bg-[#0B2F5B] px-9 py-4 text-lg font-semibold text-white shadow-[0_18px_32px_-22px_rgba(11,47,91,0.7)] transition hover:bg-[#082442] text-center no-underline"
+            >
+              Hire Talent
+            </Link>
+            <Link
+              to="/candidate-jobs"
+              className="min-w-[190px] rounded-full border border-[#cfc4bb] px-9 py-4 text-lg font-semibold text-[#1f2937] transition hover:border-[#1f2937] text-center no-underline"
+            >
+              Find Your Role
+            </Link>
+          </div>
+        </div>
+
+        <div className="relative lg:translate-x-30">
+          <div className="relative min-h-[460px]">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute right-0 top-2 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_30%_30%,#efe6ff_0%,#f7f2ff_55%,transparent_70%)] opacity-85" />
+              <div className="absolute right-14 bottom-2 h-52 w-52 rounded-full bg-[radial-gradient(circle_at_50%_50%,#fff1da_0%,#f7f2ed_65%,transparent_80%)] opacity-85" />
+            </div>
+
+            <svg className="hero-path" viewBox="0 0 520 360" fill="none">
+              <path
+                d="M48 70C130 120 210 110 260 80C320 45 405 65 450 110C500 160 450 210 380 200C300 185 240 230 200 280C160 335 80 330 40 270"
+                stroke="#d9cfc6"
+                strokeWidth="2"
+                strokeDasharray="5 9"
+              />
+            </svg>
+
+            <div className="hero-enter-wrap absolute -left-10 top-8" style={{ "--hero-delay": "0s" }}>
+              <div className="float-card shake-on-hover flex items-center gap-6 overflow-hidden rounded-2xl border border-[#cfe3c8] bg-white pl-0 pr-4 pt-2 pb-0 shadow-[0_25px_45px_-35px_rgba(22,101,52,0.4)]">
+                <img
+                  src="https://t3.ftcdn.net/jpg/18/89/73/52/240_F_1889735296_dcEb6Df6pz4EHNw3P2KGLvPj4xsMFetm.jpg"
+                  alt="Andrew Crew"
+                  className="h-36 w-36 self-end object-cover"
+                />
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-xl border border-[#ece7f7] bg-white px-3 py-1.5">
+                    <p className="text-[12px] font-semibold text-[#1f2937]">Andrew Crew</p>
+                    <p className="text-[10px] text-[#6b7280]">Developer</p>
+                  </div>
+                  <div className="flex w-fit items-center gap-1 rounded-full bg-[#e2f3d9] px-2 py-1 text-[9px] font-semibold text-[#2f6b39]">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#9bd48e] text-[8px] text-white">
+                      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none">
+                        <path
+                          d="M7 11.5l3 3 7-7"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                    Best fit
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="float-pill absolute left-[220px] top-[360px] z-10 -rotate-6 rounded-2xl border border-[#eddcc7] bg-white px-3 py-1 text-[11px] font-semibold text-[#5b4b39] shadow-sm">
+              <span className="block">Account</span>
+              <span className="block">Manager</span>
+            </div>
+
+            <div className="hero-enter-wrap absolute left-6 top-60" style={{ "--hero-delay": "0.2s" }}>
+              <div className="float-card shake-on-hover float-delay-1 overflow-hidden rounded-3xl border border-[#cfe3c8] bg-white shadow-[0_25px_45px_-35px_rgba(22,101,52,0.4)]">
+                <img
+                  src="https://t3.ftcdn.net/jpg/17/69/69/00/240_F_1769690052_LK1qCQal39UbhgfJAQyRoXOrynaulF66.jpg"
+                  alt="Account Manager"
+                  className="h-44 w-48 object-cover"
+                />
+              </div>
+            </div>
+
+            <div className="hero-enter-wrap absolute right-6 top-14" style={{ "--hero-delay": "0.4s" }}>
+              <div className="float-card shake-on-hover float-delay-2 w-[240px] overflow-hidden rounded-[28px] border border-[#cfe3c8] bg-white shadow-[0_25px_45px_-35px_rgba(22,101,52,0.4)]">
+                <img
+                  src="https://t4.ftcdn.net/jpg/11/53/92/41/240_F_1153924172_ysggsppCsRapW52HbwCS422pkIspO5UD.jpg"
+                  alt="Financial specialist"
+                  className="h-80 w-full object-cover"
+                />
+              </div>
+            </div>
+
+            <div className="float-pill absolute right-28 top-6 -rotate-6 rounded-full border border-[#e2d9d0] bg-white px-3 py-1 text-[11px] font-semibold text-[#1f2937] shadow-sm">
+              Financial specialist
+            </div>
+
+            <div className="absolute right-[148px] top-[355px] flex h-8 w-8 items-center justify-center rounded-full border border-[#f7e0a6] bg-[#fde68a] text-[#7c5d00] shadow-sm">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <path d="M12 3.5l2.6 5.26 5.8.85-4.2 4.1 1 5.8-5.2-2.74-5.2 2.74 1-5.8-4.2-4.1 5.8-.85L12 3.5z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto mt-4 flex max-w-7xl flex-col items-center gap-4 px-8 pb-8 text-center">
+        <p className="section-label">Trusted by 100+ Business Partner</p>
+        <div className="logo-row flex flex-wrap items-center justify-center gap-8 text-sm tracking-wide text-[#1f2937]">
+          {logos.map((logo) => (
+            <span key={logo}>{logo}</span>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
