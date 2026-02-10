@@ -67,102 +67,6 @@ export default function Footer() {
           max-width: 1320px;
           margin: 32px auto 0;
         }
-        .footer-cta-band {
-          --footer-cta-side: 100px;
-          --footer-left-pad: 40px;
-          --footer-right-pad: 40px;
-          background: transparent;
-          border-radius: 0;
-          padding: 0 var(--footer-cta-side, 0);
-        }
-        .footer-cta-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 45px;
-          justify-items: stretch;
-        }
-        .footer-cta-card.is-left {
-          padding-left: var(--footer-left-pad, 0px);
-          padding-right: var(--footer-left-pad, 0px);
-        }
-        .footer-cta-card.is-right {
-          padding-left: var(--footer-right-pad, 0px);
-          padding-right: var(--footer-right-pad, 0px);
-        }
-        .footer-cta-card {
-          background: #F7F2ED;
-          color: #111827;
-          border-radius: 18px;
-          padding: 0;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 18px;
-          min-height: 140px;
-          overflow: hidden;
-          max-width: none;
-          width: 100%;
-        }
-        .footer-cta-content h3 {
-          margin: 0 0 8px;
-          font-size: 20px;
-          font-family: "Inter", sans-serif;
-          font-weight: 400;
-          white-space: nowrap;
-          color: #111827;
-        }
-        .footer-cta-content p {
-          margin: 0 0 12px;
-          font-size: 13px;
-          color: #111827;
-          line-height: 1.5;
-          font-family: "Inter", sans-serif;
-          font-weight: 300;
-          max-width: 260px;
-        }
-        .footer-cta-content {
-          padding: 18px 16px;
-          transform: translateX(-20px);
-          background: #F7F2ED;
-        }
-        .footer-cta-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 999px;
-          padding: 10px 40px;
-          border: none;
-          background: #0B2F5B;
-          color: #ffffff;
-          font-family: "Inter", sans-serif;
-          font-weight: 600;
-          font-size: 12px;
-          box-shadow: 0 12px 18px -12px rgba(11, 47, 91, 0.7);
-          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
-        }
-        .footer-cta-btn:hover {
-          background: #093156;
-          transform: translateY(-1px);
-          box-shadow: 0 18px 26px -16px rgba(11, 47, 91, 0.75);
-        }
-        .footer-cta-media {
-          width: 220px;
-          height: 100%;
-          margin: 0;
-          border-radius: 0;
-          overflow: hidden;
-          flex: 0 0 auto;
-          align-self: stretch;
-          background: #F7F2ED;
-        }
-        .footer-cta-media img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-          background: #F7F2ED;
-          mix-blend-mode: multiply;
-        }
         .footer-legal {
           border-top: 1px solid rgba(255, 255, 255, 0.15);
           margin-top: 16px;
@@ -320,36 +224,6 @@ export default function Footer() {
       </div>
 
       <div className="footer-bottom">
-        <div className="footer-cta-band">
-          <div className="footer-cta-grid">
-            <div className="footer-cta-card is-left">
-              <div className="footer-cta-content">
-                <h3>Subscribe to our newsletter</h3>
-                <p>Receive updates and insights from TalentBridge straight to your inbox.</p>
-                <button type="button" className="footer-cta-btn">Subscribe</button>
-              </div>
-              <div className="footer-cta-media">
-                <img
-                  src="https://t3.ftcdn.net/jpg/06/18/47/90/240_F_618479060_vL4D1czGM00iU3ms3vYaU8k1o2plCfvn.jpg"
-                  alt="Newsletter subscriber"
-                />
-              </div>
-            </div>
-            <div className="footer-cta-card is-right">
-              <div className="footer-cta-content">
-                <h3>Get job alerts</h3>
-                <p>Be the first to receive the hottest job opportunities from TalentBridge.</p>
-                <button type="button" className="footer-cta-btn">Get notified</button>
-              </div>
-              <div className="footer-cta-media">
-                <img
-                  src="https://t3.ftcdn.net/jpg/15/85/42/90/240_F_1585429076_xzmXGOg1G6L8Ubdwj8xc8r1WPslDtxRM.jpg"
-                  alt="Job alerts"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
         <div className="footer-legal">
           2026 TalentBridge. All Rights Reserved. | Terms of Service | Privacy Policy | Accessibility Statement | AI Risk Mitigation Policy
         </div>

@@ -282,3 +282,76 @@ body {
   font-weight: 700;
   font-size: 14px;
 }
+
+@media (max-width: 768px) {
+  .hero-visuals {
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-visuals {
+    min-height: 560px;
+    margin: 20px auto 0;
+    max-width: 420px;
+  }
+
+  .hero-card-1 {
+    left: 8px;
+    top: 170px;
+    transform: scale(0.95);
+    transform-origin: top left;
+  }
+
+  .hero-card-1-photo {
+    width: 90px;
+    height: 90px;
+  }
+
+  .hero-card-2 {
+    left: 6px;
+    top: 340px;
+    transform: scale(0.95);
+    transform-origin: top left;
+  }
+
+  .hero-card-2-photo {
+    width: 160px;
+    height: 170px;
+  }
+
+  .hero-card-3 {
+    right: 0px;
+    top: 200px;
+    transform: scale(0.95);
+    transform-origin: top right;
+  }
+
+  .hero-card-3 .float-card {
+    width: 200px;
+  }
+
+  .hero-card-3-photo {
+    height: 240px;
+  }
+
+  .hero-pill-account {
+    left: 50%;
+    top: 310px;
+    transform: translateX(-50%) rotate(-6deg);
+  }
+
+  .hero-pill-finance {
+    right: 6px;
+    top: 160px;
+  }
+
+  .hero-star {
+    right: 44%;
+    top: 350px;
+  }
+
+  .hero-path {
+    opacity: 0.55;
+  }
+}

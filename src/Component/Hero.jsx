@@ -12,13 +12,13 @@ const logos = [
 
 export default function Hero() {
   return (
-    <main className="page-shell min-h-screen overflow-hidden hero-enter pt-24">
-      <section className="mx-auto grid max-w-7xl gap-12 px-8 pb-12 pt-10 lg:grid-cols-[1.05fr_0.95fr]">
+    <main className="page-shell min-h-screen overflow-hidden hero-enter pt-20 sm:pt-24">
+      <section className="mx-auto grid max-w-7xl gap-12 px-5 pb-12 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="flex flex-col justify-center gap-10 lg:-mt-1">
-          <h1 className="text-[48px] font-semibold leading-[1.08] text-[#1f2937] sm:text-[62px]">
+          <h1 className="text-[36px] font-semibold leading-[1.08] text-[#1f2937] sm:text-[62px]">
             Fastest way to hire talent and land your Next role
           </h1>
-          <p className="max-w-xl text-[18px] leading-8 text-[#5b6470] sm:text-[20px]">
+          <p className="max-w-xl text-[16px] leading-7 text-[#5b6470] sm:text-[20px]">
             Connect employers with standout
             <br />
             Candidates through curated, pre-vetted
@@ -26,16 +26,16 @@ export default function Hero() {
             hiring — not messy job boards.
           </p>
 
-          <div className="flex flex-wrap items-center gap-4 pt-2">
+          <div className="hero-actions flex items-center gap-3 pt-2 sm:gap-4">
             <Link
               to="/employers"
-              className="min-w-[190px] rounded-full bg-[#0B2F5B] px-9 py-4 text-lg font-semibold text-white shadow-[0_18px_32px_-22px_rgba(11,47,91,0.7)] transition hover:bg-[#082442] text-center no-underline"
+              className="hero-cta hero-cta-primary flex-1 min-w-0 whitespace-nowrap rounded-full bg-[#0B2F5B] px-5 py-3 text-[15px] font-semibold text-white shadow-[0_18px_32px_-22px_rgba(11,47,91,0.7)] transition hover:bg-[#082442] text-center no-underline sm:flex-none sm:min-w-[190px] sm:px-9 sm:py-4 sm:text-lg"
             >
               Hire Talent
             </Link>
             <Link
               to="/candidate-jobs"
-              className="min-w-[190px] rounded-full border border-[#cfc4bb] px-9 py-4 text-lg font-semibold text-[#1f2937] transition hover:border-[#1f2937] text-center no-underline"
+              className="hero-cta hero-cta-secondary flex-1 min-w-0 whitespace-nowrap rounded-full border border-[#cfc4bb] px-5 py-3 text-[15px] font-semibold text-[#1f2937] transition hover:border-[#1f2937] text-center no-underline sm:flex-none sm:min-w-[190px] sm:px-9 sm:py-4 sm:text-lg"
             >
               Find Your Role
             </Link>
@@ -43,7 +43,7 @@ export default function Hero() {
         </div>
 
         <div className="relative lg:translate-x-30">
-          <div className="relative min-h-[460px]">
+          <div className="hero-visuals relative min-h-[460px]">
             <div className="pointer-events-none absolute inset-0">
               <div className="absolute right-0 top-2 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_30%_30%,#efe6ff_0%,#f7f2ff_55%,transparent_70%)] opacity-85" />
               <div className="absolute right-14 bottom-2 h-52 w-52 rounded-full bg-[radial-gradient(circle_at_50%_50%,#fff1da_0%,#f7f2ed_65%,transparent_80%)] opacity-85" />
@@ -58,12 +58,12 @@ export default function Hero() {
               />
             </svg>
 
-            <div className="hero-enter-wrap absolute -left-10 top-8" style={{ "--hero-delay": "0s" }}>
+            <div className="hero-enter-wrap hero-card-1 absolute -left-10 top-8" style={{ "--hero-delay": "0s" }}>
               <div className="float-card shake-on-hover flex items-center gap-6 overflow-hidden rounded-2xl border border-[#cfe3c8] bg-white pl-0 pr-4 pt-2 pb-0 shadow-[0_25px_45px_-35px_rgba(22,101,52,0.4)]">
                 <img
                   src="https://t3.ftcdn.net/jpg/18/89/73/52/240_F_1889735296_dcEb6Df6pz4EHNw3P2KGLvPj4xsMFetm.jpg"
                   alt="Andrew Crew"
-                  className="h-36 w-36 self-end object-cover"
+                  className="hero-card-1-photo h-36 w-36 self-end object-cover"
                 />
                 <div className="flex flex-col gap-2">
                   <div className="rounded-xl border border-[#ece7f7] bg-white px-3 py-1.5">
@@ -88,36 +88,36 @@ export default function Hero() {
               </div>
             </div>
 
-            <div className="float-pill absolute left-[220px] top-[360px] z-10 -rotate-6 rounded-2xl border border-[#eddcc7] bg-white px-3 py-1 text-[11px] font-semibold text-[#5b4b39] shadow-sm">
+            <div className="float-pill hero-pill hero-pill-account absolute left-[220px] top-[360px] z-10 -rotate-6 rounded-2xl border border-[#eddcc7] bg-white px-3 py-1 text-[11px] font-semibold text-[#5b4b39] shadow-sm">
               <span className="block">Account</span>
               <span className="block">Manager</span>
             </div>
 
-            <div className="hero-enter-wrap absolute left-6 top-60" style={{ "--hero-delay": "0.2s" }}>
+            <div className="hero-enter-wrap hero-card-2 absolute left-6 top-60" style={{ "--hero-delay": "0.2s" }}>
               <div className="float-card shake-on-hover float-delay-1 overflow-hidden rounded-3xl border border-[#cfe3c8] bg-white shadow-[0_25px_45px_-35px_rgba(22,101,52,0.4)]">
                 <img
                   src="https://t3.ftcdn.net/jpg/17/69/69/00/240_F_1769690052_LK1qCQal39UbhgfJAQyRoXOrynaulF66.jpg"
                   alt="Account Manager"
-                  className="h-44 w-48 object-cover"
+                  className="hero-card-2-photo h-44 w-48 object-cover"
                 />
               </div>
             </div>
 
-            <div className="hero-enter-wrap absolute right-6 top-14" style={{ "--hero-delay": "0.4s" }}>
+            <div className="hero-enter-wrap hero-card-3 absolute right-6 top-14" style={{ "--hero-delay": "0.4s" }}>
               <div className="float-card shake-on-hover float-delay-2 w-[240px] overflow-hidden rounded-[28px] border border-[#cfe3c8] bg-white shadow-[0_25px_45px_-35px_rgba(22,101,52,0.4)]">
                 <img
                   src="https://t4.ftcdn.net/jpg/11/53/92/41/240_F_1153924172_ysggsppCsRapW52HbwCS422pkIspO5UD.jpg"
                   alt="Financial specialist"
-                  className="h-80 w-full object-cover"
+                  className="hero-card-3-photo h-80 w-full object-cover"
                 />
               </div>
             </div>
 
-            <div className="float-pill absolute right-28 top-6 -rotate-6 rounded-full border border-[#e2d9d0] bg-white px-3 py-1 text-[11px] font-semibold text-[#1f2937] shadow-sm">
+            <div className="float-pill hero-pill hero-pill-finance absolute right-28 top-6 -rotate-6 rounded-full border border-[#e2d9d0] bg-white px-3 py-1 text-[11px] font-semibold text-[#1f2937] shadow-sm">
               Financial specialist
             </div>
 
-            <div className="absolute right-[148px] top-[355px] flex h-8 w-8 items-center justify-center rounded-full border border-[#f7e0a6] bg-[#fde68a] text-[#7c5d00] shadow-sm">
+            <div className="hero-star absolute right-[148px] top-[355px] flex h-8 w-8 items-center justify-center rounded-full border border-[#f7e0a6] bg-[#fde68a] text-[#7c5d00] shadow-sm">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
                 <path d="M12 3.5l2.6 5.26 5.8.85-4.2 4.1 1 5.8-5.2-2.74-5.2 2.74 1-5.8-4.2-4.1 5.8-.85L12 3.5z" />
               </svg>
