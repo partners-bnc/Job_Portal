@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Header from "../Component/Header.jsx";
 import Footer from "../Component/Footer.tsx";
 import { jobService } from "../services/jobService.js";
@@ -146,6 +146,7 @@ const styles = {
 };
 
 export default function CandidateJob() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingFilters, setPendingFilters] = useState({ Format: [], Experience: [] });
@@ -205,7 +206,7 @@ export default function CandidateJob() {
       // Store in sessionStorage for instant access
       sessionStorage.setItem(`job_${job.id}`, JSON.stringify(jobData));
       // Navigate after data is fully loaded
-      window.location.href = `/job/${job.id}`;
+      navigate(`/job/${job.id}`);
     } catch (error) {
       console.error('Error preloading job:', error);
       setLoadingJobId(null);
