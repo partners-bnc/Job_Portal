@@ -12,6 +12,12 @@ import CandidateJob from "./pages/CandidateJob.jsx";
 import JobDetail from "./pages/JobDetail.jsx";
 import Employee from "./pages/Employee.jsx";
 import ContactUs from "./pages/ContactUs.jsx";
+import AdminLogin from "./pages/AdminLogin.jsx";
+import AdminLayout from "./pages/AdminLayout.jsx";
+import AdminRoute from "./Component/AdminRoute.jsx";
+import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
+import AdminJobListings from "./pages/admin/AdminJobListings.jsx";
+import AdminCandidates from "./pages/admin/AdminCandidates.jsx";
 
 function HomePage() {
   return (
@@ -32,11 +38,27 @@ function HomePage() {
 export default function App() {
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={<HomePage />} />
       <Route path="/candidate-jobs" element={<CandidateJob />} />
       <Route path="/job/:id" element={<JobDetail />} />
       <Route path="/employers" element={<Employee />} />
       <Route path="/contact" element={<ContactUs />} />
+
+      {/* Admin Routes */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        }
+      >
+        <Route index element={<AdminDashboard />} />
+        <Route path="jobs" element={<AdminJobListings />} />
+        <Route path="candidates" element={<AdminCandidates />} />
+      </Route>
     </Routes>
   );
 }

@@ -7,7 +7,7 @@ import { jobService } from "../services/jobService.js";
 const filterGroups = [
   {
     title: "Format",
-    options: ["Full-time", "Part time", "Hybrid", "Remote", "Office"],
+    options: ["Full-time", "Part time", "Hybrid", "Remote", "Office", "Internship"],
   },
   {
     title: "Experience",
@@ -151,9 +151,10 @@ export default function CandidateJob() {
   const [loading, setLoading] = useState(true);
   const [pendingFilters, setPendingFilters] = useState({ Format: [], Experience: [] });
   const [appliedFilters, setAppliedFilters] = useState({ Format: [], Experience: [] });
-  const [pendingSalary, setPendingSalary] = useState(25);
+  const [pendingSalary, setPendingSalary] = useState(50);
   const [appliedSalary, setAppliedSalary] = useState(null);
   const [selectedSalaryRange, setSelectedSalaryRange] = useState(null);
+  const [appliedSalaryRange, setAppliedSalaryRange] = useState(null);
   const [appliedJobs, setAppliedJobs] = useState(new Set());
   const [hoveredCard, setHoveredCard] = useState(null);
   const [hoveredButton, setHoveredButton] = useState(null);
@@ -196,6 +197,7 @@ export default function CandidateJob() {
   const handleApply = () => {
     setAppliedFilters({ ...pendingFilters });
     setAppliedSalary(pendingSalary);
+    setAppliedSalaryRange(selectedSalaryRange);
   };
 
   const handleApplyClick = async (job) => {
@@ -216,9 +218,28 @@ export default function CandidateJob() {
   const handleClear = () => {
     setPendingFilters({ Format: [], Experience: [] });
     setAppliedFilters({ Format: [], Experience: [] });
-    setPendingSalary(25);
+    setPendingSalary(50);
     setAppliedSalary(null);
     setSelectedSalaryRange(null);
+    setAppliedSalaryRange(null);
+  };
+
+  const getSalaryInfo = (salaryStr) => {
+    if (!salaryStr) return { min: 0, max: 0 };
+    const str = salaryStr.toString().toLowerCase();
+    const nums = str.match(/\d+(\.\d+)?/g);
+    if (!nums) return { min: 0, max: 0 };
+    const vals = nums.map(n => parseFloat(n));
+    if (vals.length === 1) {
+      if (str.includes('+') || str.includes('above') || str.includes('more')) {
+        return { min: vals[0], max: 999 };
+      }
+      if (str.includes('up to') || str.includes('upto') || str.includes('max')) {
+        return { min: 0, max: vals[0] };
+      }
+      return { min: vals[0], max: vals[0] };
+    }
+    return { min: Math.min(...vals), max: Math.max(...vals) };
   };
 
   const filteredJobs = jobs.filter(job => {
@@ -233,21 +254,31 @@ export default function CandidateJob() {
     
     const matchesExperience = appliedFilters.Experience.length === 0 ||
       appliedFilters.Experience.some(selectedExp => {
+        const jobExpStr = (job.experience || "").toLowerCase();
         if (selectedExp === "No Experience") {
-          return job.experience && (job.experience.toLowerCase().includes("no") || job.experience.includes("0"));
+          return jobExpStr.includes("no") || jobExpStr.includes("0") || jobExpStr.includes("fresher");
         }
-        const selectedYears = parseInt(selectedExp.split(' ')[0]);
-        const jobMinYears = job.experience ? parseInt(job.experience.split('-')[0]) : 0;
+        const selectedYears = parseInt(selectedExp.match(/\d+/)?.[0] || 0);
+        const jobMinYearsMatch = jobExpStr.match(/\d+(\.\d+)?/);
+        if (!jobMinYearsMatch) return false;
+        const jobMinYears = parseFloat(jobMinYearsMatch[0]);
         return selectedYears >= jobMinYears;
       });
     
-    const jobSalaryMax = job.salary ? parseInt(job.salary.toString().replace(/[^0-9]/g, '')) : 0;
-    const matchesSalary = appliedSalary === null || jobSalaryMax <= appliedSalary;
+    const jobSal = getSalaryInfo(job.salary);
+    let matchesSalary = true;
+
+    if (appliedSalaryRange) {
+       const rangeSal = getSalaryInfo(appliedSalaryRange);
+       matchesSalary = (jobSal.min <= rangeSal.max && jobSal.max >= rangeSal.min);
+    } else if (appliedSalary !== null && appliedSalary !== 50) {
+       matchesSalary = jobSal.min <= appliedSalary;
+    }
     
     return matchesSearch && matchesFormat && matchesExperience && matchesSalary;
   });
 
-  const hasAnyFilters = pendingFilters.Format.length > 0 || pendingFilters.Experience.length > 0 || selectedSalaryRange !== null || pendingSalary !== 25;
+  const hasAnyFilters = pendingFilters.Format.length > 0 || pendingFilters.Experience.length > 0 || selectedSalaryRange !== null || pendingSalary !== 50;
 
   return (
     <div className="min-h-screen" style={{backgroundColor: '#F7F1EC', position: 'relative', overflowX: 'hidden', width: '100%'}}>

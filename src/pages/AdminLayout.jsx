@@ -1,0 +1,190 @@
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+
+const NAV_ITEMS = [
+  {
+    to: "/admin",
+    label: "Dashboard",
+    end: true,
+    icon: (
+      <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
+        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+      </svg>
+    )
+  },
+  {
+    to: "/admin/jobs",
+    label: "Job Listings",
+    icon: (
+      <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
+        <path d="M20 6h-2.18c.11-.31.18-.65.18-1a3 3 0 0 0-5.5-1.65l-.5.67-.5-.68A2.996 2.996 0 0 0 6 4c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2z" />
+      </svg>
+    )
+  },
+  {
+    to: "/admin/candidates",
+    label: "Candidates",
+    icon: (
+      <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
+        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+      </svg>
+    )
+  }
+];
+
+export default function AdminLayout() {
+  const navigate = useNavigate();
+  const adminId = sessionStorage.getItem("bnc_admin_id") || "Admin";
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("bnc_admin_auth");
+    sessionStorage.removeItem("bnc_admin_id");
+    navigate("/admin/login");
+  };
+
+  return (
+    <div style={{
+      display: "flex", minHeight: "100vh",
+      fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
+      background: "#f7f2ed"
+    }}>
+      {/* Sidebar */}
+      <aside style={{
+        width: sidebarOpen ? "240px" : "72px",
+        background: "linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 100%)", // Light Sky Blue Gradient
+        display: "flex", flexDirection: "column",
+        transition: "width 0.25s ease",
+        userSelect: "none", flexShrink: 0,
+        boxShadow: "10px 0 40px rgba(11, 47, 91, 0.08)",
+        borderTopRightRadius: "32px",
+        borderBottomRightRadius: "32px",
+        position: "relative",
+        zIndex: 10,
+        overflow: "hidden"
+      }}>
+        {/* Sidebar Background Glows - Light Blue Theme */}
+        <div style={{
+          position: "absolute", top: "-40px", left: "-40px", width: "160px", height: "160px", borderRadius: "50%",
+          background: "radial-gradient(circle at 30% 30%, #ecfeff 0%, transparent 70%)",
+          opacity: 0.8, zIndex: -1, pointerEvents: "none", filter: "blur(20px)"
+        }} />
+        <div style={{
+          position: "absolute", bottom: "15%", right: "-20px", width: "130px", height: "130px", borderRadius: "50%",
+          background: "radial-gradient(circle at 50% 50%, #ffffff 0%, transparent 75%)",
+          opacity: 0.6, zIndex: -1, pointerEvents: "none", filter: "blur(20px)"
+        }} />
+
+        {/* Brand */}
+        <div style={{
+          padding: sidebarOpen ? "24px 20px 20px" : "24px 12px 20px",
+          borderBottom: "1px solid rgba(255,255,255,0.1)",
+          display: "flex", alignItems: "center", gap: "12px"
+        }}>
+          <div style={{
+            width: "36px", height: "36px", flexShrink: 0, borderRadius: "10px",
+            background: "rgba(99, 88, 220, 0.15)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer"
+          }} onClick={() => setSidebarOpen(v => !v)}>
+            <svg width="20" height="20" fill="#312e81" viewBox="0 0 24 24">
+              <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+            </svg>
+          </div>
+          {sidebarOpen && (
+            <div>
+              <div style={{ color: "#312e81", fontWeight: 700, fontSize: "15px", lineHeight: 1.2 }}>BnC Global</div>
+              <div style={{ color: "rgba(49, 46, 129, 0.6)", fontSize: "11px", fontWeight: 600 }}>Admin Panel</div>
+            </div>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: "16px 10px", display: "flex", flexDirection: "column", gap: "4px" }}>
+          {NAV_ITEMS.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              style={({ isActive }) => ({
+                display: "flex", alignItems: "center",
+                gap: "12px", padding: sidebarOpen ? "11px 14px" : "11px 0",
+                justifyContent: sidebarOpen ? "flex-start" : "center",
+                borderRadius: "12px", textDecoration: "none",
+                fontWeight: 700, fontSize: "14px", transition: "all 0.2s",
+                color: isActive ? "#312e81" : "rgba(49, 46, 129, 0.7)",
+                background: isActive ? "rgba(255,255,255,0.6)" : "transparent",
+                boxShadow: isActive ? "0 4px 12px rgba(99, 88, 220, 0.1)" : "none"
+              })}
+            >
+              {({ isActive }) => (
+                <>
+                  <div style={{ opacity: isActive ? 1 : 0.8 }}>{item.icon}</div>
+                  {sidebarOpen && <span>{item.label}</span>}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Bottom: user & logout */}
+        <div style={{
+          borderTop: "1px solid rgba(0,0,0,0.06)",
+          padding: sidebarOpen ? "16px 14px" : "16px 10px"
+        }}>
+          {sidebarOpen && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px"
+            }}>
+              <div style={{
+                width: "34px", height: "34px", borderRadius: "50%",
+                background: "rgba(255,255,255,0.7)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#312e81", fontWeight: 700, fontSize: "13px", flexShrink: 0,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
+              }}>
+                {adminId.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ color: "#312e81", fontSize: "13px", fontWeight: 700 }}>{adminId}</div>
+                <div style={{ color: "rgba(49, 46, 129, 0.6)", fontSize: "11px", fontWeight: 600 }}>HR / Admin</div>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            style={{
+              width: "100%", border: "1.5px solid rgba(99, 88, 220, 0.2)",
+              borderRadius: "10px", padding: sidebarOpen ? "9px 14px" : "9px 0",
+              background: "rgba(255,255,255,0.5)", color: "#3730a3",
+              cursor: "pointer", fontSize: "13px", fontWeight: 700,
+              display: "flex", alignItems: "center",
+              justifyContent: sidebarOpen ? "flex-start" : "center", gap: "8px",
+              transition: "all 0.2s", fontFamily: "inherit"
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "#fee2e2";
+              e.currentTarget.style.color = "#dc2626";
+              e.currentTarget.style.borderColor = "#fecaca";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.5)";
+              e.currentTarget.style.color = "#3730a3";
+              e.currentTarget.style.borderColor = "rgba(99, 88, 220, 0.2)";
+            }}
+          >
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+            </svg>
+            {sidebarOpen && "Logout"}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
+        <Outlet />
+      </main>
+    </div>
+  );
+}

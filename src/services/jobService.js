@@ -1,4 +1,4 @@
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBk0vDJYVc1lHFCMz5ij4qdg_iiTP0OKfvw-opBq3iEGe5uCUdp0xRK4Pw__NuyU1pTg/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyPt46x3gP_azR9DENPdOE0Sl9bcBVQaJJYDIxZlNSjXKxMC7awZWyO5BsaSJcT75Y7Qg/exec';
 
 export const jobService = {
   async fetchJobs() {
@@ -117,6 +117,102 @@ export const jobService = {
       return data;
     } catch (error) {
       console.error('Error submitting application:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async adminLogin(loginId, password) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'adminLogin');
+      formData.append('loginId', loginId);
+      formData.append('password', password);
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error in adminLogin:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async addJob(jobData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'addJob');
+      Object.keys(jobData).forEach(key => {
+        if (jobData[key] !== null && jobData[key] !== undefined) {
+          formData.append(key, jobData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error in addJob:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async updateJob(jobData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'updateJob');
+      Object.keys(jobData).forEach(key => {
+        if (jobData[key] !== null && jobData[key] !== undefined) {
+          formData.append(key, jobData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error in updateJob:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async deleteJob(jobId) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'deleteJob');
+      formData.append('jobId', jobId);
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error in deleteJob:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async fetchCandidates() {
+    try {
+      const response = await fetch(`${SCRIPT_URL}?action=getCandidates`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await response.json();
+      if (data.success && Array.isArray(data.candidates)) {
+        return data.candidates;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      return [];
+    }
+  },
+
+  async saveAiResults(email, jobApplied, aiData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'saveAiAnalysis');
+      formData.append('email', email);
+      formData.append('jobApplied', jobApplied);
+      formData.append('aiScore', String(aiData.score ?? ''));
+      formData.append('aiAnalysis', aiData.analysis ?? '');
+      formData.append('shortlistDecision', aiData.decision ?? '');
+      formData.append('shortlistReason', aiData.reason ?? '');
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error saving AI results:', error);
       return { error: error.toString() };
     }
   }

@@ -1,11 +1,130 @@
 import { useState } from 'react';
 import { jobService } from '../services/jobService.js';
 import { parseResume } from '../services/resumeParser.js';
+import { analyzeCandidate } from '../services/aiService.js';
 import { 
   FiUpload, FiFile, FiEye, FiRefreshCw, FiX, FiCheck, FiZap, FiEdit3,
   FiUser, FiMail, FiPhone, FiMapPin, FiBookOpen, FiBriefcase,
   FiSearch, FiCheckCircle, FiLoader, FiCircle
 } from 'react-icons/fi';
+
+// Auto badge component
+const AutoBadge = ({ field, autoFilledFields }) => {
+  if (!autoFilledFields.has(field)) return null;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
+      color: '#fff', fontSize: '9px', fontWeight: 700,
+      padding: '2px 7px', borderRadius: '20px', letterSpacing: '0.5px',
+      position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+      pointerEvents: 'none', textTransform: 'uppercase', lineHeight: '16px'
+    }}>
+      <FiZap size={8} /> AUTO
+    </span>
+  );
+};
+
+const InputWithBadge = ({ field, autoFilledFields, children }) => (
+  <div style={{ position: 'relative' }}>{children}<AutoBadge field={field} autoFilledFields={autoFilledFields} /></div>
+);
+
+// ── Scanning Progress Component ──
+const ScanningOverlay = ({ parseProgress }) => {
+  const stages = [
+    { key: 'extracting', label: 'Reading resume content', icon: <FiFile size={15} /> },
+    { key: 'contact', label: 'Extracting contact details', icon: <FiUser size={15} /> },
+    { key: 'education', label: 'Parsing education info', icon: <FiBookOpen size={15} /> },
+    { key: 'experience', label: 'Analyzing work experience', icon: <FiBriefcase size={15} /> },
+    { key: 'done', label: 'Completed', icon: <FiCheckCircle size={15} /> },
+  ];
+
+  const currentIndex = stages.findIndex(s => s.key === parseProgress);
+  const progressPercent = parseProgress === 'done' ? 100 : Math.max(8, ((currentIndex + 1) / stages.length) * 100);
+
+  return (
+    <div style={{
+      borderRadius: '14px', padding: '28px 24px',
+      background: '#f8fafc', border: '1px solid #e2e8f0',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <div style={{
+          width: '40px', height: '40px', borderRadius: '12px',
+          background: parseProgress === 'done' ? '#0B2F5B' : '#fff',
+          border: parseProgress === 'done' ? 'none' : '2px solid #0B2F5B',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: parseProgress === 'done' ? '#fff' : '#0B2F5B',
+          animation: parseProgress === 'done' ? 'none' : 'spin 2s linear infinite',
+          flexShrink: 0
+        }}>
+          {parseProgress === 'done' ? <FiCheck size={18} /> : <FiSearch size={18} />}
+        </div>
+        <div>
+          <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>
+            {parseProgress === 'done' ? 'AI Scanning Complete' : 'AI is scanning your resume...'}
+          </h4>
+          <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#94a3b8' }}>
+            {parseProgress === 'done' ? 'All sections have been processed' : 'Please wait a moment'}
+          </p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden', marginBottom: '18px' }}>
+        <div style={{
+          width: `${progressPercent}%`, height: '100%',
+          background: 'linear-gradient(90deg, #0B2F5B, #1a4a8a)',
+          borderRadius: '2px', transition: 'width 0.6s ease'
+        }} />
+      </div>
+
+      {/* Stage list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {stages.map((stage, i) => {
+          const isDone = currentIndex > i || parseProgress === 'done';
+          const isCurrent = currentIndex === i && parseProgress !== 'done';
+
+          return (
+            <div key={stage.key} style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '8px 12px', borderRadius: '8px',
+              background: isCurrent ? '#0B2F5B08' : 'transparent',
+              border: isCurrent ? '1px solid #0B2F5B20' : '1px solid transparent',
+              transition: 'all 0.3s'
+            }}>
+              <div style={{
+                width: '26px', height: '26px', borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                background: isDone ? '#0B2F5B' : isCurrent ? '#fff' : '#f1f5f9',
+                border: isCurrent ? '2px solid #0B2F5B' : 'none',
+                color: isDone ? '#fff' : isCurrent ? '#0B2F5B' : '#cbd5e1',
+                transition: 'all 0.3s'
+              }}>
+                {isDone ? <FiCheck size={12} /> : isCurrent ? <FiLoader size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <FiCircle size={8} />}
+              </div>
+              <span style={{
+                fontSize: '13px', fontWeight: isCurrent ? 600 : 400,
+                color: isDone ? '#0B2F5B' : isCurrent ? '#1e293b' : '#94a3b8',
+                transition: 'color 0.3s'
+              }}>
+                {stage.label}
+              </span>
+              {isDone && (
+                <span style={{
+                  marginLeft: 'auto', fontSize: '10px', fontWeight: 600,
+                  color: '#0B2F5B', background: '#0B2F5B12', padding: '2px 8px',
+                  borderRadius: '10px', letterSpacing: '0.3px'
+                }}>Done</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, company }) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -13,6 +132,7 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
 
   // Auto-fill related states
   const [fillMode, setFillMode] = useState('none'); // 'none' | 'auto' | 'manual'
@@ -148,12 +268,54 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
         resumeData: formData.resumeData, resumeFileName: formData.resumeFileName
       };
       const result = await jobService.submitApplication(applicationData);
-      if (result.success) { setIsSubmitted(true); }
-      else { alert('Failed to submit application. Please try again.'); }
+      if (result.success) {
+        setIsSubmitted(true);
+        // Non-blocking AI analysis — runs in background after success screen shows
+        triggerAiAnalysis(applicationData);
+      } else {
+        alert('Failed to submit application. Please try again.');
+      }
     } catch (error) {
       console.error('Error submitting application:', error);
       alert('Failed to submit application. Please try again.');
     } finally { setIsSubmitting(false); }
+  };
+
+  const triggerAiAnalysis = async (applicationData) => {
+    try {
+      setIsAiAnalyzing(true);
+      // We pass jobData we already have (title, id, and whatever was available)
+      const jobData = {
+        title: applicationData.jobTitle,
+        id: applicationData.jobId,
+        experience: '', education: '', salary: '', type: '', description: ''
+      };
+      // Fetch full job data for better analysis if possible
+      try {
+        const fullJob = await jobService.fetchJobById(applicationData.jobId);
+        if (fullJob) {
+          Object.assign(jobData, fullJob);
+        }
+      } catch (e) {
+        console.warn('Could not fetch full job for AI analysis, using partial data.');
+      }
+
+      const aiResult = await analyzeCandidate(applicationData, jobData);
+      console.log('AI analysis complete:', aiResult);
+
+      // Save results to Google Sheet
+      const jobAppliedStr = `${applicationData.jobTitle} (ID: ${applicationData.jobId})`;
+      await jobService.saveAiResults(
+        applicationData.email,
+        jobAppliedStr,
+        aiResult
+      );
+      console.log('AI results saved to sheet.');
+    } catch (err) {
+      console.error('AI analysis pipeline error:', err);
+    } finally {
+      setIsAiAnalyzing(false);
+    }
   };
 
   const resetForm = () => {
@@ -177,124 +339,6 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
     { number: 4, title: 'Experience', icon: <FiBriefcase size={14} /> }
   ];
 
-  // Auto badge component
-  const AutoBadge = ({ field }) => {
-    if (!autoFilledFields.has(field)) return null;
-    return (
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: '3px',
-        background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
-        color: '#fff', fontSize: '9px', fontWeight: 700,
-        padding: '2px 7px', borderRadius: '20px', letterSpacing: '0.5px',
-        position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
-        pointerEvents: 'none', textTransform: 'uppercase', lineHeight: '16px'
-      }}>
-        <FiZap size={8} /> AUTO
-      </span>
-    );
-  };
-
-  const InputWithBadge = ({ field, children }) => (
-    <div style={{ position: 'relative' }}>{children}<AutoBadge field={field} /></div>
-  );
-
-  // ── Scanning Progress Component ──
-  const ScanningOverlay = () => {
-    const stages = [
-      { key: 'extracting', label: 'Reading resume content', icon: <FiFile size={15} /> },
-      { key: 'contact', label: 'Extracting contact details', icon: <FiUser size={15} /> },
-      { key: 'education', label: 'Parsing education info', icon: <FiBookOpen size={15} /> },
-      { key: 'experience', label: 'Analyzing work experience', icon: <FiBriefcase size={15} /> },
-      { key: 'done', label: 'Completed', icon: <FiCheckCircle size={15} /> },
-    ];
-
-    const currentIndex = stages.findIndex(s => s.key === parseProgress);
-    const progressPercent = parseProgress === 'done' ? 100 : Math.max(8, ((currentIndex + 1) / stages.length) * 100);
-
-    return (
-      <div style={{
-        borderRadius: '14px', padding: '28px 24px',
-        background: '#f8fafc', border: '1px solid #e2e8f0',
-      }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-          <div style={{
-            width: '40px', height: '40px', borderRadius: '12px',
-            background: parseProgress === 'done' ? '#0B2F5B' : '#fff',
-            border: parseProgress === 'done' ? 'none' : '2px solid #0B2F5B',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: parseProgress === 'done' ? '#fff' : '#0B2F5B',
-            animation: parseProgress === 'done' ? 'none' : 'spin 2s linear infinite',
-            flexShrink: 0
-          }}>
-            {parseProgress === 'done' ? <FiCheck size={18} /> : <FiSearch size={18} />}
-          </div>
-          <div>
-            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>
-              {parseProgress === 'done' ? 'AI Scanning Complete' : 'AI is scanning your resume...'}
-            </h4>
-            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#94a3b8' }}>
-              {parseProgress === 'done' ? 'All sections have been processed' : 'Please wait a moment'}
-            </p>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden', marginBottom: '18px' }}>
-          <div style={{
-            width: `${progressPercent}%`, height: '100%',
-            background: 'linear-gradient(90deg, #0B2F5B, #1a4a8a)',
-            borderRadius: '2px', transition: 'width 0.6s ease'
-          }} />
-        </div>
-
-        {/* Stage list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {stages.map((stage, i) => {
-            const isDone = currentIndex > i || parseProgress === 'done';
-            const isCurrent = currentIndex === i && parseProgress !== 'done';
-            const isPending = !isDone && !isCurrent;
-
-            return (
-              <div key={stage.key} style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '8px 12px', borderRadius: '8px',
-                background: isCurrent ? '#0B2F5B08' : 'transparent',
-                border: isCurrent ? '1px solid #0B2F5B20' : '1px solid transparent',
-                transition: 'all 0.3s'
-              }}>
-                <div style={{
-                  width: '26px', height: '26px', borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  background: isDone ? '#0B2F5B' : isCurrent ? '#fff' : '#f1f5f9',
-                  border: isCurrent ? '2px solid #0B2F5B' : 'none',
-                  color: isDone ? '#fff' : isCurrent ? '#0B2F5B' : '#cbd5e1',
-                  transition: 'all 0.3s'
-                }}>
-                  {isDone ? <FiCheck size={12} /> : isCurrent ? <FiLoader size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <FiCircle size={8} />}
-                </div>
-                <span style={{
-                  fontSize: '13px', fontWeight: isCurrent ? 600 : 400,
-                  color: isDone ? '#0B2F5B' : isCurrent ? '#1e293b' : '#94a3b8',
-                  transition: 'color 0.3s'
-                }}>
-                  {stage.label}
-                </span>
-                {isDone && (
-                  <span style={{
-                    marginLeft: 'auto', fontSize: '10px', fontWeight: 600,
-                    color: '#0B2F5B', background: '#0B2F5B12', padding: '2px 8px',
-                    borderRadius: '10px', letterSpacing: '0.3px'
-                  }}>Done</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div style={{
@@ -465,7 +509,7 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
                   {/* Parsing Animation */}
                   {isParsing && (
                     <div style={{ animation: 'fadeIn 0.3s ease', marginBottom: '16px' }}>
-                      <ScanningOverlay />
+                      <ScanningOverlay parseProgress={parseProgress} />
                     </div>
                   )}
 
@@ -617,28 +661,28 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
                     </div>
                   )}
                   <div style={{ display: 'grid', gap: '14px' }}>
-                    <InputWithBadge field="candidateName">
+                    <InputWithBadge field="candidateName" autoFilledFields={autoFilledFields}>
                       <input type="text" placeholder="Candidate Name *" value={formData.candidateName}
                         onChange={(e) => handleInputChange('candidateName', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', paddingRight: autoFilledFields.has('candidateName') ? '78px' : '14px', border: `1px solid ${errors.candidateName ? '#dc3545' : '#e0e0e0'}`, borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                     </InputWithBadge>
                     {errors.candidateName && <div style={{color: '#dc3545', fontSize: '11px', marginTop: '-8px'}}>{errors.candidateName}</div>}
 
-                    <InputWithBadge field="email">
+                    <InputWithBadge field="email" autoFilledFields={autoFilledFields}>
                       <input type="email" placeholder="Email *" value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', paddingRight: autoFilledFields.has('email') ? '78px' : '14px', border: `1px solid ${errors.email ? '#dc3545' : '#e0e0e0'}`, borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                     </InputWithBadge>
                     {errors.email && <div style={{color: '#dc3545', fontSize: '11px', marginTop: '-8px'}}>{errors.email}</div>}
 
-                    <InputWithBadge field="contactNumber">
+                    <InputWithBadge field="contactNumber" autoFilledFields={autoFilledFields}>
                       <input type="tel" placeholder="Contact Number *" value={formData.contactNumber}
                         onChange={(e) => handleInputChange('contactNumber', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', paddingRight: autoFilledFields.has('contactNumber') ? '78px' : '14px', border: `1px solid ${errors.contactNumber ? '#dc3545' : '#e0e0e0'}`, borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                     </InputWithBadge>
                     {errors.contactNumber && <div style={{color: '#dc3545', fontSize: '11px', marginTop: '-8px'}}>{errors.contactNumber}</div>}
 
-                    <InputWithBadge field="currentLocation">
+                    <InputWithBadge field="currentLocation" autoFilledFields={autoFilledFields}>
                       <input type="text" placeholder="Current Location *" value={formData.currentLocation}
                         onChange={(e) => handleInputChange('currentLocation', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', paddingRight: autoFilledFields.has('currentLocation') ? '78px' : '14px', border: `1px solid ${errors.currentLocation ? '#dc3545' : '#e0e0e0'}`, borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
@@ -670,7 +714,7 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
                       Education details were extracted from your resume. Please review.
                     </div>
                   )}
-                  <InputWithBadge field="recentEducation">
+                  <InputWithBadge field="recentEducation" autoFilledFields={autoFilledFields}>
                     <textarea placeholder="Recent Education * (e.g., MBA in Finance from XYZ University, 2020)"
                       value={formData.recentEducation}
                       onChange={(e) => handleInputChange('recentEducation', e.target.value)}
@@ -703,7 +747,7 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
                     </div>
                   )}
                   <div style={{ display: 'grid', gap: '14px' }}>
-                    <InputWithBadge field="totalExperience">
+                    <InputWithBadge field="totalExperience" autoFilledFields={autoFilledFields}>
                       <select value={formData.totalExperience} onChange={(e) => handleInputChange('totalExperience', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}>
                         <option value="">Total Experience (Years)</option>
@@ -715,13 +759,13 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
                       </select>
                     </InputWithBadge>
 
-                    <InputWithBadge field="currentCompany">
+                    <InputWithBadge field="currentCompany" autoFilledFields={autoFilledFields}>
                       <input type="text" placeholder="Current Company" value={formData.currentCompany}
                         onChange={(e) => handleInputChange('currentCompany', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none', paddingRight: autoFilledFields.has('currentCompany') ? '78px' : '14px', boxSizing: 'border-box' }} />
                     </InputWithBadge>
 
-                    <InputWithBadge field="currentPosition">
+                    <InputWithBadge field="currentPosition" autoFilledFields={autoFilledFields}>
                       <input type="text" placeholder="Current Position" value={formData.currentPosition}
                         onChange={(e) => handleInputChange('currentPosition', e.target.value)}
                         style={{ width: '100%', padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none', paddingRight: autoFilledFields.has('currentPosition') ? '78px' : '14px', boxSizing: 'border-box' }} />
@@ -730,13 +774,13 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                       <input type="number" placeholder="Current CTC (LPA)" value={formData.currentCTC}
                         onChange={(e) => handleInputChange('currentCTC', e.target.value)}
-                        style={{ padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none' }} />
+                        style={{ width: '100%', padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                       <input type="number" placeholder="Expected CTC (LPA)" value={formData.expectedCTC}
                         onChange={(e) => handleInputChange('expectedCTC', e.target.value)}
-                        style={{ padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none' }} />
+                        style={{ width: '100%', padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                     <select value={formData.noticePeriod} onChange={(e) => handleInputChange('noticePeriod', e.target.value)}
-                      style={{ padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none' }}>
+                      style={{ width: '100%', padding: '11px 14px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}>
                       <option value="">Notice Period</option>
                       <option value="Immediate">Immediate</option>
                       <option value="15 days">15 Days</option>
@@ -792,6 +836,17 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
               Your application for <strong>{jobTitle}</strong> has been successfully submitted.
               Our team will review your profile and get back to you shortly.
             </p>
+            {isAiAnalyzing && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+                border: '1px solid #93c5fd', borderRadius: '10px',
+                padding: '8px 16px', marginBottom: '16px', animation: 'pulse 2s infinite'
+              }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #0B2F5B', borderTop: '2px solid transparent', animation: 'spin 1s linear infinite' }} />
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>🤖 AI is analyzing your profile...</span>
+              </div>
+            )}
             <p style={{ margin: '0 0 28px', fontSize: '13px', color: '#666' }}>Kindly check your email for further communication.</p>
             <button onClick={resetForm} style={{
               padding: '10px 28px', border: 'none', background: '#0B2F5B', color: '#fff',

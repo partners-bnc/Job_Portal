@@ -354,7 +354,23 @@ export default function JobDetail() {
                 </svg>
                 Job Description
               </h2>
-              <p style={{...styles.cardText, paddingLeft: '28px'}}>{job.description}</p>
+              <div style={{...styles.cardText, paddingLeft: '28px', whiteSpace: 'pre-wrap', lineHeight: 1.8}}>
+                {(job.description || '').split('\n').map((line, i) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return <div key={i} style={{height: '8px'}} />;
+                  const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
+                  if (isBullet) {
+                    return (
+                      <div key={i} style={{display: 'flex', gap: '8px', marginBottom: '4px', paddingLeft: '8px'}}>
+                        <span style={{color: '#0b2f5b', fontWeight: 700, flexShrink: 0}}>•</span>
+                        <span>{trimmed.replace(/^[•\-\*]\s*/, '')}</span>
+                      </div>
+                    );
+                  }
+                  return <div key={i} style={{marginBottom: '4px', fontWeight: trimmed.length < 60 && !trimmed.includes(':') ? 400 : 400}}>{trimmed}</div>;
+                })}
+              </div>
+
             </div>
           </div>
           
