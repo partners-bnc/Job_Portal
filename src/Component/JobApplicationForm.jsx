@@ -260,7 +260,7 @@ export default function JobApplicationForm({ isOpen, onClose, jobTitle, jobId, c
       setIsSubmitting(true);
       const applicationData = {
         candidateName: formData.candidateName, email: formData.email,
-        contactNumber: formData.contactNumber, currentLocation: formData.currentLocation,
+        contactNumber: `'${formData.contactNumber}`, currentLocation: formData.currentLocation,
         recentEducation: formData.recentEducation, totalExperience: formData.totalExperience,
         currentCompany: formData.currentCompany, currentPosition: formData.currentPosition,
         currentCTC: formData.currentCTC, expectedCTC: formData.expectedCTC,

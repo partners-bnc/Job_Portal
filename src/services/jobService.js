@@ -1,4 +1,4 @@
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyPt46x3gP_azR9DENPdOE0Sl9bcBVQaJJYDIxZlNSjXKxMC7awZWyO5BsaSJcT75Y7Qg/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXnrv8UT35fNC5OdgEUdTvrhZCxC0n5EmWnY2jCodvINquAKYfzY-UYEa4O4fvtphE7Q/exec';
 
 export const jobService = {
   async fetchJobs() {
@@ -199,6 +199,40 @@ export const jobService = {
     }
   },
 
+  async uploadCVToDatabase(cvData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'uploadCV');
+      Object.keys(cvData).forEach(key => {
+        if (cvData[key] !== null && cvData[key] !== undefined) {
+          formData.append(key, cvData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error in uploadCVToDatabase:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async getDatabaseCandidates() {
+    try {
+      const response = await fetch(`${SCRIPT_URL}?action=getDatabaseCandidates`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await response.json();
+      if (data.success && Array.isArray(data.candidates)) {
+        return data.candidates;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching database candidates:', error);
+      return [];
+    }
+  },
+
   async saveAiResults(email, jobApplied, aiData) {
     try {
       const formData = new FormData();
@@ -213,6 +247,170 @@ export const jobService = {
       return await response.json();
     } catch (error) {
       console.error('Error saving AI results:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async updateDatabaseCandidate(updateData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'updateDatabaseCandidate');
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] !== null && updateData[key] !== undefined) {
+          formData.append(key, updateData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating database candidate:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async getDatabaseCandidateById(applicantId) {
+    try {
+      const all = await this.getDatabaseCandidates();
+      return all.find(c => c.applicantId === applicantId.toString()) || null;
+    } catch (error) {
+      console.error('Error fetching candidate by ID:', error);
+      return null;
+    }
+  },
+
+  async shortlistCandidate(data) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'shortlistCandidate');
+      formData.append('applicantId', data.applicantId || '');
+      formData.append('name', data.name || '');
+      formData.append('jobRole', data.jobRole || '');
+      formData.append('company', data.company || '');
+      formData.append('shortlistedBy', data.shortlistedBy || '');
+      formData.append('jobCode', data.jobCode || '');
+      
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error shortlisting candidate:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async removeShortlist(params) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'removeShortlist');
+      formData.append('applicantId', params.applicantId || '');
+      formData.append('jobCode', params.jobCode || '');
+      
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error removing shortlist:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async getShortlistedCandidates() {
+    try {
+      const response = await fetch(`${SCRIPT_URL}?action=getShortlistedCandidates`);
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      return data.data || [];
+    } catch (error) {
+      console.error('Error fetching shortlisted candidates:', error);
+      return [];
+    }
+  },
+
+  async fetchClients() {
+    try {
+      const response = await fetch(`${SCRIPT_URL}?action=getClients`);
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      return data.clients || [];
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      return [];
+    }
+  },
+
+  async addClient(clientData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'addClient');
+      Object.keys(clientData).forEach(key => {
+        if (clientData[key] !== null && clientData[key] !== undefined) {
+          formData.append(key, clientData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error adding client:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async updateClient(clientData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'updateClient');
+      Object.keys(clientData).forEach(key => {
+        if (clientData[key] !== null && clientData[key] !== undefined) {
+          formData.append(key, clientData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating client:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async fetchClientJobs() {
+    try {
+      const response = await fetch(`${SCRIPT_URL}?action=getClientJobs`);
+      const data = await response.json();
+      return data.success ? data.clientJobs : [];
+    } catch (error) {
+      console.error('Error fetching client jobs:', error);
+      return [];
+    }
+  },
+
+  async addClientJob(jobData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'addClientJob');
+      Object.keys(jobData).forEach(key => {
+        if (jobData[key] !== null && jobData[key] !== undefined) {
+          formData.append(key, jobData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error adding client job:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async updateClientJob(jobData) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'updateClientJob');
+      Object.keys(jobData).forEach(key => {
+        if (jobData[key] !== null && jobData[key] !== undefined) {
+          formData.append(key, jobData[key]);
+        }
+      });
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating client job:', error);
       return { error: error.toString() };
     }
   }

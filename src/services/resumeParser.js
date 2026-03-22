@@ -122,7 +122,11 @@ const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 /**
  * Send extracted text to Groq AI to intelligently parse resume fields
  */
-async function extractFieldsWithGroq(resumeText) {
+async function extractFieldsWithGroq(resumeText, extended = false) {
+  const extraFields = extended ? `,
+  "skills": "Comma-separated list of all technical skills, tools, technologies, soft skills, and domain keywords found in the resume (string or null)",
+  "summary": "A concise 2-3 sentence professional summary of the candidate based on their experience, skills, and background (string or null)"` : '';
+
   const prompt = `You are a resume parser. Analyze the following resume text and extract the requested information.
 
 RESUME TEXT:
@@ -140,7 +144,7 @@ Extract the following fields from the resume. Return ONLY a valid JSON object wi
   "recentEducation": "Most recent education details including degree, institution, specialization, and year if available. Include all education entries found, separated by newlines (string or null)",
   "totalExperience": "Total years of professional experience as a number. Use one of these exact values: '0' for fresher, '1', '2', '3', '4', '5' for exact years, '6-10' for 6 to 10 years, '10+' for more than 10 years. (string or null)",
   "currentCompany": "Most recent or current company/organization name (string or null)",
-  "currentPosition": "Most recent or current job title/designation (string or null)"
+  "currentPosition": "Most recent or current job title/designation (string or null)"${extraFields}
 }
 
 IMPORTANT RULES:
@@ -233,7 +237,7 @@ export async function parseResume(file, onProgress) {
     // Step 2: Send to Groq AI for intelligent extraction
     if (onProgress) onProgress('contact');
     
-    const extracted = await extractFieldsWithGroq(text);
+    const extracted = await extractFieldsWithGroq(text, false);
     console.log('Groq extracted fields:', extracted);
 
     if (onProgress) onProgress('education');
@@ -283,6 +287,70 @@ export async function parseResume(file, onProgress) {
     if (onProgress) onProgress('done');
   } catch (error) {
     console.error('Resume parsing error:', error);
+    if (onProgress) onProgress('error');
+  }
+
+  return result;
+}
+
+/**
+ * Extended resume parser for HR CV uploads.
+ * Returns all standard fields PLUS skills and summary.
+ */
+export async function parseResumeForDatabase(file, onProgress) {
+  const result = {
+    data: {},
+    autoFilledFields: new Set(),
+  };
+
+  try {
+    if (onProgress) onProgress('extracting');
+    const text = await extractText(file);
+
+    if (!text || text.trim().length < 20) {
+      console.warn('Not enough text extracted from resume');
+      return result;
+    }
+
+    if (onProgress) onProgress('contact');
+    const extracted = await extractFieldsWithGroq(text, true); // extended = true
+    console.log('Groq (extended) extracted fields:', extracted);
+
+    if (onProgress) onProgress('education');
+
+    const fieldMap = {
+      candidateName: extracted.candidateName,
+      email: extracted.email,
+      contactNumber: extracted.contactNumber,
+      currentLocation: extracted.currentLocation,
+      education: extracted.recentEducation,
+      totalExperience: extracted.totalExperience,
+      currentCompany: extracted.currentCompany,
+      currentPosition: extracted.currentPosition,
+      skills: extracted.skills,
+      summary: extracted.summary,
+    };
+
+    if (onProgress) onProgress('experience');
+
+    for (const [key, value] of Object.entries(fieldMap)) {
+      if (value !== null && value !== undefined && value !== '') {
+        if (key === 'email') {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(value)) continue;
+        }
+        if (key === 'totalExperience') {
+          const validValues = ['0','1','2','3','4','5','6-10','10+'];
+          if (!validValues.includes(value)) continue;
+        }
+        result.data[key] = value;
+        result.autoFilledFields.add(key);
+      }
+    }
+
+    if (onProgress) onProgress('done');
+  } catch (error) {
+    console.error('Resume parsing error (extended):', error);
     if (onProgress) onProgress('error');
   }
 

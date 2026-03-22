@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { jobService } from "../../services/jobService.js";
 
 function StatCard({ icon, label, value, color, bg }) {
@@ -25,21 +26,60 @@ function StatCard({ icon, label, value, color, bg }) {
 export default function AdminDashboard() {
   const [jobs, setJobs] = useState([]);
   const [candidates, setCandidates] = useState([]);
+  const [dbCandidates, setDbCandidates] = useState([]);
+  const [shortlisted, setShortlisted] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const adminId = sessionStorage.getItem("bnc_admin_id") || "Admin";
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [j, c] = await Promise.all([jobService.fetchJobs(), jobService.fetchCandidates()]);
+      const [j, c, db, s, clientsData] = await Promise.all([
+        jobService.fetchJobs(), 
+        jobService.fetchCandidates(),
+        jobService.getDatabaseCandidates(),
+        jobService.getShortlistedCandidates(),
+        jobService.fetchClients()
+      ]);
       setJobs(j || []);
       setCandidates(c || []);
+      setDbCandidates(db || []);
+      setShortlisted(s || []);
+      setClients(clientsData || []);
       setLoading(false);
     };
     load();
   }, []);
 
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+  const [hrDateFilter, setHrDateFilter] = useState("");
+
+  const hrStats = useMemo(() => {
+    const stats = {};
+    dbCandidates.forEach(c => {
+      if (hrDateFilter) {
+        const d = new Date(c.createdOn);
+        if (isNaN(d.getTime()) || d.toISOString().split('T')[0] !== hrDateFilter) return;
+      }
+      // Group by uploadedBy (fallback to 'Unknown' if not present)
+      const hr = c.uploadedBy || 'Portal / Unknown';
+      stats[hr] = (stats[hr] || 0) + 1;
+    });
+    return Object.entries(stats).sort((a, b) => b[1] - a[1]);
+  }, [dbCandidates, hrDateFilter]);
+
+  const COLORS = ['#0b2f5b', '#059669', '#d97706', '#7c3aed', '#db2777', '#2563eb', '#ea580c'];
+
+  const sourceStats = useMemo(() => {
+    const stats = {};
+    dbCandidates.forEach(c => {
+      const src = c.source || 'Portal / Unknown';
+      stats[src] = (stats[src] || 0) + 1;
+    });
+    return Object.entries(stats).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [dbCandidates]);
 
   // Recent 5 candidates
   const recent = candidates.slice(-5).reverse();
@@ -58,18 +98,142 @@ export default function AdminDashboard() {
       {loading ? (
         <div style={{ color: "#6b7280", fontSize: "15px", padding: "20px 0" }}>Loading stats...</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "32px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "32px" }}>
           <StatCard icon="💼" label="Active Job Listings" value={jobs.length} color="#0b2f5b" bg="#e8f0ff" />
           <StatCard icon="👥" label="Total Candidates" value={candidates.length} color="#059669" bg="#ecfdf5" />
           <StatCard icon="📋" label="Applications Today" value={candidates.filter(c => {
-            if (!c.timestamp) return false;
-            const d = new Date(c.timestamp);
+            const ts = c.createdOn || c.timestamp;
+            if (!ts) return false;
+            const d = new Date(ts);
             const now = new Date();
             return d.toDateString() === now.toDateString();
           }).length} color="#d97706" bg="#fffbeb" />
           <StatCard icon="✨" label="AI Shortlisted" value={candidates.filter(c => c.shortlistDecision === 'Shortlisted').length} color="#7c3aed" bg="#f5f3ff" />
+          
+          <StatCard icon="📈" label="Total Applicant" value={dbCandidates.length} color="#2563eb" bg="#dbeafe" />
+          <StatCard icon="🏆" label="Shortlisted by HR" value={shortlisted.length} color="#16a34a" bg="#dcfce7" />
+          <StatCard icon="📅" label="Month CV Upload" value={dbCandidates.filter(c => {
+            const d = new Date(c.createdOn);
+            if (isNaN(d.getTime())) return false;
+            const now = new Date();
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+          }).length} color="#ca8a04" bg="#fef08a" />
+          <StatCard icon="🏢" label="Total Client" value={clients.length} color="#9333ea" bg="#f3e8ff" />
         </div>
       )}
+
+      {/* Lower Split Section */}
+      <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", marginBottom: "32px", alignItems: "stretch" }}>
+        
+        {/* Left: HR Upload Stats Table */}
+        <div style={{
+          flex: "1 1 min(100%, 500px)", background: "#ffffff", borderRadius: "18px",
+          border: "1px solid #e8ecf0", overflow: "hidden",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column"
+        }}>
+          <div style={{ padding: "20px 24px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#111827" }}>HR CV Upload Summary</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>Filter by Date:</span>
+            <input 
+              type="date" 
+              value={hrDateFilter}
+              onChange={(e) => setHrDateFilter(e.target.value)}
+              style={{
+                padding: "8px 12px", border: "1px solid #e5dfd8", borderRadius: "8px", 
+                fontSize: "13px", outline: "none", color: "#374151"
+              }}
+            />
+            {hrDateFilter && (
+              <button 
+                onClick={() => setHrDateFilter("")}
+                style={{ fontSize: "12px", color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: "32px", textAlign: "center", color: "#6b7280" }}>Loading...</div>
+        ) : hrStats.length === 0 ? (
+          <div style={{ padding: "32px", textAlign: "center", color: "#6b7280", fontSize: "14px" }}>
+            No uploads found for the selected criteria.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f9fafb" }}>
+                  <th style={{ padding: "12px 20px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>HR Name</th>
+                  <th style={{ padding: "12px 20px", textAlign: "right", fontSize: "12px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>CVs Uploaded</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hrStats.map(([hrName, count], idx) => (
+                  <tr key={hrName} style={{ borderTop: "1px solid #f3f4f6", background: idx % 2 === 0 ? "#fff" : "#fafafa", transition: "background 0.2s" }}>
+                    <td style={{ padding: "14px 20px", fontWeight: 600, fontSize: "14px", color: "#111827" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#e8f0ff", color: "#0b2f5b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700 }}>
+                          {(hrName || "A").charAt(0).toUpperCase()}
+                        </div>
+                        {hrName}
+                      </div>
+                    </td>
+                    <td style={{ padding: "14px 20px", textAlign: "right", fontSize: "15px", fontWeight: 700, color: "#059669" }}>
+                      {count}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        </div>
+
+        {/* Right: Candidates by Source Chart */}
+        <div style={{
+          flex: "1 1 min(100%, 500px)", background: "#ffffff", borderRadius: "18px",
+          border: "1px solid #e8ecf0", overflow: "hidden",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column"
+        }}>
+          <div style={{ padding: "20px 24px", borderBottom: "1px solid #f3f4f6" }}>
+            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#111827" }}>Candidates by Source</h2>
+          </div>
+          <div style={{ flex: 1, padding: "24px", display: "flex", alignItems: "center", justifyContent: "center", minHeight: "320px" }}>
+            {loading ? (
+              <div style={{ color: "#6b7280" }}>Loading chart...</div>
+            ) : sourceStats.length === 0 ? (
+              <div style={{ color: "#6b7280" }}>No sourcing data available.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={sourceStats}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={110}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {sourceStats.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', fontWeight: 600 }}
+                    itemStyle={{ color: '#111827' }}
+                  />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '13px', paddingTop: '20px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+        
+      </div>
 
       {/* Recent Applications */}
       <div style={{

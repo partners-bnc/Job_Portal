@@ -18,6 +18,13 @@ import AdminRoute from "./Component/AdminRoute.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminJobListings from "./pages/admin/AdminJobListings.jsx";
 import AdminCandidates from "./pages/admin/AdminCandidates.jsx";
+import AdminCVUpload from "./pages/admin/AdminCVUpload.jsx";
+import AdminApplicants from "./pages/admin/AdminApplicants.jsx";
+import CandidateDetail from "./pages/admin/CandidateDetail.jsx";
+import AdminShortlisted from "./pages/admin/AdminShortlisted.jsx";
+import AdminClients from "./pages/admin/AdminClients.jsx";
+import AdminClientJobs from "./pages/admin/AdminClientJobs.jsx";
+import AdminClientJobDetail from "./pages/admin/AdminClientJobDetail.jsx";
 
 function HomePage() {
   return (
@@ -58,6 +65,13 @@ export default function App() {
         <Route index element={<AdminDashboard />} />
         <Route path="jobs" element={<AdminJobListings />} />
         <Route path="candidates" element={<AdminCandidates />} />
+        <Route path="cv-upload" element={<AdminCVUpload />} />
+        <Route path="applicants" element={<AdminApplicants />} />
+        <Route path="applicants/:id" element={<CandidateDetail />} />
+        <Route path="shortlisted" element={<AdminShortlisted />} />
+        <Route path="clients" element={<AdminClients />} />
+        <Route path="client-jobs" element={<AdminClientJobs />} />
+        <Route path="client-jobs/:jobCode" element={<AdminClientJobDetail />} />
       </Route>
     </Routes>
   );

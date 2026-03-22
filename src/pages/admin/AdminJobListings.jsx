@@ -174,7 +174,7 @@ export default function AdminJobListings() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: 700, color: "#111827" }}>Job Listings</h1>
+          <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: 700, color: "#111827" }}>Portal Job Listing</h1>
           <p style={{ margin: 0, color: "#6b7280", fontSize: "13px" }}>
             {loading ? "Loading..." : `${filteredJobs.length} jobs · Manage your open positions`}
           </p>
