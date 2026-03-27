@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
-import { FiArrowLeft, FiMapPin, FiBriefcase, FiUser, FiClock, FiSearch, FiRefreshCw } from 'react-icons/fi';
+import { FiArrowLeft, FiMapPin, FiBriefcase, FiUser, FiClock, FiSearch, FiRefreshCw, FiFileText } from 'react-icons/fi';
 
 export default function AdminClientJobDetail() {
   const { jobCode } = useParams();
@@ -10,6 +10,8 @@ export default function AdminClientJobDetail() {
   const [shortlistedForJob, setShortlistedForJob] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -20,20 +22,20 @@ export default function AdminClientJobDetail() {
           jobService.getShortlistedCandidates(),
           jobService.getDatabaseCandidates()
         ]);
-        
+
         const foundJob = jobs.find(j => j.jobCode === jobCode);
         setJob(foundJob || null);
 
         if (foundJob) {
           // Filter shortlists for this job
           const matches = allShortlists.filter(s => s.jobCode === jobCode);
-          
+
           // Enrich with full applicant data
           const enriched = matches.map(m => {
             const fullData = allApplicants.find(a => a.applicantId === m.applicantId);
             return { ...m, ...fullData };
           });
-          
+
           setShortlistedForJob(enriched);
         }
       } catch (err) {
@@ -73,10 +75,10 @@ export default function AdminClientJobDetail() {
 
   return (
     <div style={{ padding: '24px 32px', background: '#f8fafc', minHeight: '100vh' }}>
-      
+
       {/* Top Banner Area */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-        
+
         {/* Header Row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -87,11 +89,22 @@ export default function AdminClientJobDetail() {
               <FiBriefcase color="#f59e0b" /> {job.jobCode} - {job.jobTitle}
             </h1>
           </div>
-          <div style={{
-            background: isBoxActive ? '#22c55e' : '#ef4444',
-            color: '#fff', padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 800
-          }}>
-            {job.status?.toUpperCase() || 'ACTIVE'}
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button
+              onClick={() => navigate('/admin/client-jobs', { state: { editJobCode: job.jobCode } })}
+              style={{
+                background: '#fff', border: '1px solid #e2e8f0', color: '#0f172a',
+                padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+              }}
+            >
+              Edit Job
+            </button>
+            <div style={{
+              background: isBoxActive ? '#22c55e' : '#ef4444',
+              color: '#fff', padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 800
+            }}>
+              {job.status?.toUpperCase() || 'ACTIVE'}
+            </div>
           </div>
         </div>
 
@@ -104,34 +117,49 @@ export default function AdminClientJobDetail() {
               <FiMapPin /> {job.location}{job.state ? `, ${job.state}` : ''}, {job.country}
             </span>
           </div>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '8px' }}>Assigned To - N/A</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Assigned To:</span>
+            {job.assignedTo ? (
+              job.assignedTo.split(',').map((hr, idx) => (
+                <span key={idx} style={{
+                  display: 'inline-block', background: '#ecfdf5', color: '#059669',
+                  border: '1px solid #a7f3d0', padding: '3px 10px', borderRadius: '16px',
+                  fontSize: '12px', fontWeight: 700
+                }}>
+                  {hr.trim()}
+                </span>
+              ))
+            ) : (
+              <span style={{ fontSize: '13px', color: '#94a3b8' }}>N/A</span>
+            )}
+          </div>
           <div style={{ fontSize: '13px', color: '#3b82f6', marginTop: '8px', fontWeight: 600 }}>Matching Applicants {shortlistedForJob.length}</div>
         </div>
 
         <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '0 0 24px 0' }} />
 
         {/* Info Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '20px', paddingLeft: '44px' }}>
-          <div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', alignItems: 'center', paddingLeft: '44px' }}>
+          <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Recruitment Manager</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.recruitmentManager || 'N/A'}</div>
           </div>
-          <div>
+          <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Client Bill Rate / Salary</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>N/A</div>
           </div>
-          <div>
+          <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Pay Rate / Salary</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.payRate || 'N/A'}</div>
           </div>
-          <div>
+          <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Created By & On</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.createdBy}</div>
             <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>On {formatDate(job.createdOn)}</div>
           </div>
-          <div>
+          <div style={{ paddingLeft: '16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Business Unit</div>
-            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.businessUnit || 'N/A'}</div>
+            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.businessUnit || 'Broccoli and Carrots Global Services Pvt. Ltd.'}</div>
           </div>
         </div>
 
@@ -140,8 +168,8 @@ export default function AdminClientJobDetail() {
         {/* Job Description Box */}
         <div style={{ paddingLeft: '44px' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 800, color: '#1e293b' }}>Job Description</h3>
-          <div style={{ 
-            fontSize: '14px', color: '#475569', lineHeight: '1.7', 
+          <div style={{
+            fontSize: '14px', color: '#475569', lineHeight: '1.7',
             whiteSpace: 'pre-wrap', background: '#f8fafc', padding: '16px', borderRadius: '12px',
             maxHeight: isDescExpanded ? 'none' : '100px',
             overflow: 'hidden',
@@ -153,7 +181,7 @@ export default function AdminClientJobDetail() {
             )}
           </div>
           {(job.jobDescription?.length > 200) && (
-            <button 
+            <button
               onClick={() => setIsDescExpanded(!isDescExpanded)}
               style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 700, fontSize: '13px', cursor: 'pointer', marginTop: '8px', padding: 0 }}
             >
@@ -163,83 +191,245 @@ export default function AdminClientJobDetail() {
         </div>
       </div>
 
-      {/* Submissions Section (Static UI as requested) */}
+      {/* ── Submissions Section with Pipeline Stepper ── */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-        <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>Submissions</h2>
-        
-        {/* Filters */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', width: '250px' }}>
-            <FiSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input type="text" placeholder="Search" style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-          
-          {[
-            { label: 'Pipeline', count: 0 },
-            { label: 'All', count: shortlistedForJob.length },
-            { label: 'Client Submissions', count: 0 },
-            { label: 'Interviews', count: 0 },
-            { label: 'Confirmations', count: 0 },
-            { label: 'Placements', count: 0 },
-            { label: 'Not Joined', count: 0 }
-          ].map((filter, i) => (
-            <div key={filter.label} style={{ 
-              padding: '8px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, 
-              background: i === 1 ? '#3b82f6' : '#f1f5f9',
-              color: i === 1 ? '#fff' : '#64748b', cursor: 'pointer'
-            }}>
-              {filter.label} {filter.count}
-            </div>
-          ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>Submissions</h2>
+          <button
+            onClick={() => navigate(`/admin/client-jobs/${jobCode}/email`)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 18px', borderRadius: '8px', border: 'none',
+              background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700,
+              cursor: 'pointer', transition: 'background 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
+            onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
+          >
+            📧 Email Automation
+          </button>
         </div>
 
-        {/* Static Submissions Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px' }}>
-                <th style={{ padding: '12px', textTransform: 'uppercase' }}>Candidate Name</th>
-                <th style={{ padding: '12px', textTransform: 'uppercase' }}>Email Address</th>
-                <th style={{ padding: '12px', textTransform: 'uppercase' }}>Phone Number</th>
-                <th style={{ padding: '12px', textTransform: 'uppercase' }}>Candidate ID</th>
-                <th style={{ padding: '12px', textTransform: 'uppercase', textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shortlistedForJob.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
-                    No submissions yet. Navigate to the Applicant Database to shortlist candidates for this job.
-                  </td>
-                </tr>
-              ) : (
-                shortlistedForJob.map((c, idx) => (
-                  <tr key={idx} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }}>
-                    <td style={{ padding: '16px 12px' }}>
-                      <div style={{ fontWeight: 700, color: '#1e293b' }}>{c.name}</div>
-                    </td>
-                    <td style={{ padding: '16px 12px', color: '#475569', fontSize: '13px' }}>
-                      {c.email || '—'}
-                    </td>
-                    <td style={{ padding: '16px 12px', color: '#475569', fontSize: '13px' }}>
-                      {c.contactNumber || '—'}
-                    </td>
-                    <td style={{ padding: '16px 12px', color: '#94a3b8', fontSize: '12px', fontWeight: 600 }}>
-                      #{c.applicantId}
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'right' }}>
-                      <button 
+        {/* Filter Pills */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', width: '220px' }}>
+            <FiSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box', fontSize: '13px' }}
+            />
+          </div>
+          {[
+            { label: 'Pipeline', count: shortlistedForJob.length },
+            { label: 'All', count: shortlistedForJob.length },
+            { label: 'Manager Submit', count: 0 },
+            { label: 'Client Submission', count: 0 },
+            { label: 'Feedback', count: 0 },
+          ].map((filter) => {
+            const isActive = activeFilter === filter.label;
+            return (
+              <div
+                key={filter.label}
+                onClick={() => setActiveFilter(filter.label)}
+                style={{
+                  padding: '7px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                  background: isActive ? '#3b82f6' : '#f1f5f9',
+                  color: isActive ? '#fff' : '#64748b', cursor: 'pointer',
+                  border: isActive ? 'none' : '1px solid #e2e8f0',
+                  transition: 'all 0.2s'
+                }}>
+                {filter.label} {filter.count}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Table Header */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1.4fr 1.2fr 1.2fr 1.2fr 100px',
+          padding: '12px 32px', background: '#f8fafc', border: '1px solid #e2e8f0',
+          borderRadius: '8px 8px 0 0', gap: '24px'
+        }}>
+          {['NAME', 'TAGGED BY/ON', 'CONTACT/LOCATION', 'STATUS'].map(h => (
+            <div key={h} style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', letterSpacing: '0.5px' }}>{h}</div>
+          ))}
+          <div />
+        </div>
+
+        {/* Candidate Cards with Pipeline */}
+        {(() => {
+          const filteredSubmissions = shortlistedForJob.filter(c => {
+            const searchMatch = !searchTerm.trim() ||
+              c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              c.contactNumber?.includes(searchTerm);
+
+            // In the future this can check actual DB state like c.pipelineStage === activeFilter
+            let tabMatch = true;
+            if (activeFilter !== 'All' && activeFilter !== 'Pipeline') {
+              tabMatch = false; // Stub: no one is past pipeline yet
+            }
+
+            return searchMatch && tabMatch;
+          });
+
+          if (filteredSubmissions.length === 0) {
+            return (
+              <div style={{ padding: '50px', textAlign: 'center', color: '#94a3b8', fontSize: '14px', borderBottom: '1px solid #e2e8f0' }}>
+                {searchTerm || activeFilter !== 'All' ? 'No candidates match your search or filter.' : 'No submissions yet. Navigate to the Applicant Database to shortlist candidates for this job.'}
+              </div>
+            );
+          }
+
+          return filteredSubmissions.map((c, idx) => {
+            // Determine current pipeline step (1=Pipeline done, 2=Manager Submit done, etc.)
+            const pipelineStep = 1; // Default: tagged/shortlisted = Pipeline step done
+
+            // Stepper config matching the grid columns exactly
+            const STEPS = [
+              { label: 'Pipeline', col: 1 },
+              { label: 'Manager Submit', col: 2 },
+              { label: 'Client Submission', col: 3 },
+              { label: 'Feedback', col: 4 }
+            ];
+
+            return (
+              <div key={idx} style={{ borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0' }}>
+                {/* ── Data Row ── */}
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1.4fr 1.2fr 1.2fr 1.2fr 100px',
+                  padding: '12px 32px', alignItems: 'center', gap: '24px'
+                }}>
+                  {/* Name */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                    <div style={{ color: '#3b82f6', marginTop: '3px' }}>
+                      <FiFileText size={16} />
+                    </div>
+                    <div>
+                      <a
                         onClick={() => navigate(`/admin/applicants/${c.applicantId}`)}
-                        style={{ padding: '6px 14px', background: '#0B2F5B', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                        style={{ color: '#2563eb', fontWeight: 700, fontSize: '13px', cursor: 'pointer', textDecoration: 'none' }}
                       >
-                        View Profile
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                        {c.name}
+                      </a>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>#{c.applicantId}</div>
+                    </div>
+                  </div>
+
+                  {/* Submitted By / On */}
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#1e293b', fontWeight: 600 }}>{c.uploadedBy || 'N/A'}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{formatDate(c.shortlistedOn || c.createdOn)}</div>
+                  </div>
+
+                  {/* Contact / Location */}
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#1e293b', fontWeight: 600 }}>{c.contactNumber || 'N/A'}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{c.currentLocation || 'N/A'}</div>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <a
+                      href="#"
+                      onClick={(e) => { e.preventDefault(); navigate(`/admin/applicants/${c.applicantId}`); }}
+                      style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}
+                    >
+                      Waiting for Evaluation ↗
+                    </a>
+                  </div>
+
+                  {/* Empty div to maintain grid space for future buttons */}
+                  <div />
+                </div>
+
+                {/* ── Pipeline Stepper ── */}
+                <div style={{ padding: '0 32px 16px 32px' }}>
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1.4fr 1.2fr 1.2fr 1.2fr 100px',
+                    alignItems: 'flex-start', gap: '24px'
+                  }}>
+                    {STEPS.map((step, si) => {
+                      const isDone = si < pipelineStep;
+                      // The line should be green if the *next* step is also done
+                      const isLineGreen = si < pipelineStep - 1;
+                      const hasNext = si < STEPS.length - 1;
+
+                      const centerOffset = '36px'; // The anchor point for the center of the step's dot
+
+                      return (
+                        <div key={step.label} style={{ gridColumn: step.col, position: 'relative', height: '60px' }}>
+
+                          {/* Starting line BEFORE Pipeline */}
+                          {si === 0 && (
+                            <div style={{
+                              position: 'absolute', top: '8px', left: '0px',
+                              width: centerOffset, height: '4px', // starts at 0 (not touching container edge), ends at centerOffset
+                              background: isDone ? '#22c55e' : '#e2e8f0', zIndex: 0
+                            }} />
+                          )}
+
+                          {/* Connector line stretching right to the center of the next cell */}
+                          {hasNext && (
+                            <div style={{
+                              position: 'absolute', top: '8px', left: centerOffset,
+                              width: 'calc(100% + 24px)', height: '4px',
+                              background: isLineGreen ? '#22c55e' : '#e2e8f0', zIndex: 0
+                            }} />
+                          )}
+
+                          {/* Ending line AFTER Feedback */}
+                          {!hasNext && (
+                            <div style={{
+                              position: 'absolute', top: '8px', left: centerOffset,
+                              width: '40px', height: '4px', // tiny stub on the right
+                              background: '#e2e8f0', zIndex: 0
+                            }} />
+                          )}
+
+                          {/* Centered Content Block (Circle + Text) */}
+                          <div style={{
+                            position: 'absolute', left: centerOffset, top: '0',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            width: '80px', transform: 'translateX(-50%)'
+                          }}>
+                            {/* Circle */}
+                            <div style={{
+                              width: '20px', height: '20px', borderRadius: '50%', zIndex: 1,
+                              background: isDone ? '#22c55e' : '#fff',
+                              border: isDone ? '2px solid #22c55e' : '2px solid #cbd5e1',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '11px', color: isDone ? '#fff' : '#cbd5e1', fontWeight: 800
+                            }}>
+                              {isDone ? '✓' : ''}
+                            </div>
+
+                            {/* Label */}
+                            <div style={{ fontSize: '10px', color: isDone ? '#1e293b' : '#94a3b8', fontWeight: 600, marginTop: '8px', textAlign: 'center', lineHeight: '1.3' }}>
+                              {step.label}
+                            </div>
+
+                            {/* Date */}
+                            <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', textAlign: 'center' }}>
+                              {isDone ? formatDate(c.shortlistedOn || c.createdOn) : ''}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        })()}
+
+        {/* Bottom pagination hint */}
+        <div style={{ padding: '14px 16px', fontSize: '12px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Showing 1 to {shortlistedForJob.length} of {shortlistedForJob.length} entries</span>
         </div>
       </div>
 

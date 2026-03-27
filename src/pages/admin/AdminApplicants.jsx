@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
+import Loader from '../../Component/Loader';
 import {
   FiSearch, FiFilter, FiX, FiUser, FiMail, FiPhone, FiMapPin,
   FiBriefcase, FiBookOpen, FiTag, FiAlignLeft, FiCalendar,
@@ -387,7 +388,7 @@ export default function AdminApplicants() {
           <div>
             <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Applicants database</h1>
             <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-              {loading ? 'Loading...' : `${filtered.length} of ${candidates.length} total candidates`}
+              {loading ? <div style={{display:'inline-block', width:'12px', height:'12px', border:'2px solid transparent', borderTopColor:'#0B2F5B', borderRadius:'50%', animation:'spin 1s linear infinite'}}></div> : `${filtered.length} of ${candidates.length} total candidates`}
             </p>
           </div>
         </div>
@@ -533,10 +534,7 @@ export default function AdminApplicants() {
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 16px rgba(11,47,91,0.05)' }}>
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
-            <FiRefreshCw size={28} style={{ animation: 'spin 1s linear infinite', marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
-            <div style={{ fontSize: '14px' }}>Loading applicants...</div>
-          </div>
+          <Loader text="Loading applicants..." />
         ) : paged.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
             <FiDatabase size={36} style={{ marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />

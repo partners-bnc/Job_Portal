@@ -75,6 +75,7 @@ You must return ONLY a valid JSON object with no extra text, comments, or markdo
       analysis: (parsed.analysis || 'No analysis provided.').slice(0, 500),
       decision: decision,
       reason: (parsed.reason || 'No reason provided.').slice(0, 300),
+      certification: (parsed.certification || 'None').slice(0, 200),
     };
   } catch (error) {
     console.error('AI Analysis error:', error);
@@ -130,7 +131,8 @@ Return ONLY this exact JSON structure:
   "score": <integer from 0 to 10>,
   "analysis": "<2-4 professional sentences comparing the candidate's qualifications to EACH major job requirement>",
   "decision": "<exactly 'Shortlisted' or 'Not Shortlisted'>",
-  "reason": "<1-2 sentences; if Shortlisted, highlight the strongest matching qualifications; if Not Shortlisted, cite the specific gaps>"
+  "reason": "<1-2 sentences; if Shortlisted, highlight the strongest matching qualifications; if Not Shortlisted, cite the specific gaps>",
+  "certification": "<Extract any certification names mentioned in the resume as a comma separated string, or 'None' if none found>"
 }
 `;
 }

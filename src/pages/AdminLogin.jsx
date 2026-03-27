@@ -23,6 +23,7 @@ export default function AdminLogin() {
       if (result.success) {
         sessionStorage.setItem("bnc_admin_auth", "true");
         sessionStorage.setItem("bnc_admin_id", result.loginId || loginId);
+        sessionStorage.setItem("bnc_admin_name", result.hrName || result.loginId || loginId);
         navigate("/admin");
       } else {
         setError(result.error || "Invalid Login ID or Password. Please try again.");

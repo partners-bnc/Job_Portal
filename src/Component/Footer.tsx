@@ -13,7 +13,7 @@ export default function Footer() {
             radial-gradient(circle at 94% 18%, rgba(93, 121, 82, 0.6) 0, rgba(93, 121, 82, 0.6) 12px, transparent 13px),
             radial-gradient(circle at 90% 82%, rgba(93, 121, 82, 0.45) 0, rgba(93, 121, 82, 0.45) 9px, transparent 10px),
             #1f1f1f;
-          padding: 70px 24px 70px;
+          padding: 40px 24px 30px;
           font-family: "Inter", sans-serif;
           color: #e5e7eb;
           border-top-left-radius: 28px;
@@ -65,7 +65,7 @@ export default function Footer() {
         }
         .footer-bottom {
           max-width: 1320px;
-          margin: 32px auto 0;
+          margin: 20px auto 0;
         }
         .footer-legal {
           border-top: 1px solid rgba(255, 255, 255, 0.15);
@@ -92,7 +92,7 @@ export default function Footer() {
           font-size: 16px;
         }
         .footer-logo img {
-          height: 170px;
+          height: 100px;
           width: auto;
           display: block;
           margin-left: -5px;

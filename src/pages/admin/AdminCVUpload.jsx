@@ -4,7 +4,7 @@ import { parseResumeForDatabase } from '../../services/resumeParser.js';
 import {
   FiUpload, FiFile, FiX, FiCheck, FiZap, FiLoader, FiUser,
   FiPhone, FiMail, FiMapPin, FiBriefcase, FiBookOpen, FiTag,
-  FiAlignLeft, FiCheckCircle, FiAlertCircle, FiChevronRight, FiDatabase
+  FiAward, FiAlignLeft, FiCheckCircle, FiAlertCircle, FiChevronRight, FiDatabase
 } from 'react-icons/fi';
 
 // ── Helpers ──
@@ -107,6 +107,7 @@ function SingleUpload({ adminName }) {
   const [parsed, setParsed] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState(null);
+  const [wasUpdate, setWasUpdate] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef();
 
@@ -162,6 +163,7 @@ function SingleUpload({ adminName }) {
         });
         if (result.success) {
           setSavedId(result.applicantId);
+          setWasUpdate(result.isUpdate === true);
           setFile(null); setParsed(null); setSource(''); setParseProgress('');
         } else {
           setError(result.error || 'Failed to save. Please try again.');
@@ -178,29 +180,50 @@ function SingleUpload({ adminName }) {
   const updateField = (key, val) => setParsed(prev => ({ ...prev, [key]: val }));
 
   if (savedId) {
+    const isUpdated = wasUpdate;
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px', animation: 'fadeIn 0.4s ease' }}>
         <div style={{
           width: '64px', height: '64px', borderRadius: '50%',
-          background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
+          background: isUpdated
+            ? 'linear-gradient(135deg, #d97706, #f59e0b)'
+            : 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 16px', color: '#fff'
         }}>
           <FiCheckCircle size={28} />
         </div>
-        <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>CV Saved Successfully!</h3>
+        <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>
+          {isUpdated ? 'Existing Record Updated!' : 'CV Saved Successfully!'}
+        </h3>
         <div style={{
-          display: 'inline-block', margin: '8px 0 20px',
-          background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-          border: '1px solid #93c5fd', borderRadius: '12px',
-          padding: '10px 24px', fontSize: '15px', fontWeight: 700, color: '#1e40af'
+          display: 'inline-block', margin: '8px 0 12px',
+          background: isUpdated
+            ? 'linear-gradient(135deg, #fffbeb, #fef3c7)'
+            : 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+          border: isUpdated ? '1px solid #fcd34d' : '1px solid #93c5fd',
+          borderRadius: '12px',
+          padding: '10px 24px', fontSize: '15px', fontWeight: 700,
+          color: isUpdated ? '#b45309' : '#1e40af'
         }}>
           Applicant ID: #{savedId}
         </div>
-        <p style={{ color: '#64748b', fontSize: '13px', margin: '0 0 24px' }}>
-          The candidate has been added to the Database sheet.
+        <p style={{ color: '#64748b', fontSize: '13px', margin: '0 0 8px' }}>
+          {isUpdated
+            ? 'A matching candidate was found in the database. Their record has been updated with the latest data & resume.'
+            : 'The candidate has been added to the Database sheet.'}
         </p>
-        <button onClick={() => setSavedId(null)} style={{
+        {isUpdated && (
+          <div style={{
+            display: 'inline-block', margin: '0 0 20px',
+            background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px',
+            padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#92400e'
+          }}>
+            ⚡ Matched via Email or Phone Number — old AI analysis has been cleared for re-evaluation.
+          </div>
+        )}
+        <br />
+        <button onClick={() => { setSavedId(null); setWasUpdate(false); }} style={{
           padding: '10px 24px', background: '#0B2F5B', color: '#fff',
           border: 'none', borderRadius: '10px', cursor: 'pointer',
           fontSize: '13px', fontWeight: 600
@@ -337,6 +360,7 @@ function SingleUpload({ adminName }) {
               <FieldRow icon={<FiBriefcase size={12} />} label="Position" value={parsed.currentPosition} editable onChange={v => updateField('currentPosition', v)} />
               <FieldRow icon={<FiBookOpen size={12} />} label="Education" value={parsed.education} editable multiline onChange={v => updateField('education', v)} />
               <FieldRow icon={<FiTag size={12} />} label="Skills" value={parsed.skills} editable multiline onChange={v => updateField('skills', v)} />
+              <FieldRow icon={<FiAward size={12} />} label="Certifications" value={parsed.certifications} editable multiline onChange={v => updateField('certifications', v)} />
               <FieldRow icon={<FiAlignLeft size={12} />} label="Summary" value={parsed.summary} editable multiline onChange={v => updateField('summary', v)} />
             </div>
           </div>
@@ -368,7 +392,7 @@ function BulkUpload({ adminName }) {
   const [error, setError] = useState('');
   const fileInputRef = useRef();
 
-  const STATUS = { WAITING: 'waiting', PARSING: 'parsing', SAVING: 'saving', DONE: 'done', FAILED: 'failed' };
+  const STATUS = { WAITING: 'waiting', PARSING: 'parsing', SAVING: 'saving', DONE: 'done', UPDATED: 'updated', FAILED: 'failed' };
 
   const handleFiles = (fileList) => {
     const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
@@ -380,8 +404,8 @@ function BulkUpload({ adminName }) {
     setStarted(false);
   };
 
-  const statusColor = { [STATUS.WAITING]: '#94a3b8', [STATUS.PARSING]: '#f59e0b', [STATUS.SAVING]: '#3b82f6', [STATUS.DONE]: '#059669', [STATUS.FAILED]: '#dc3545' };
-  const statusLabel = { [STATUS.WAITING]: 'Waiting', [STATUS.PARSING]: 'Parsing...', [STATUS.SAVING]: 'Saving...', [STATUS.DONE]: 'Done', [STATUS.FAILED]: 'Failed' };
+  const statusColor = { [STATUS.WAITING]: '#94a3b8', [STATUS.PARSING]: '#f59e0b', [STATUS.SAVING]: '#3b82f6', [STATUS.DONE]: '#059669', [STATUS.UPDATED]: '#d97706', [STATUS.FAILED]: '#dc3545' };
+  const statusLabel = { [STATUS.WAITING]: 'Waiting', [STATUS.PARSING]: 'Parsing...', [STATUS.SAVING]: 'Saving...', [STATUS.DONE]: 'Added', [STATUS.UPDATED]: 'Updated', [STATUS.FAILED]: 'Failed' };
 
   const updateResult = (i, patch) => setResults(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
 
@@ -418,12 +442,18 @@ function BulkUpload({ adminName }) {
         });
 
         if (saveResult.success) {
-          updateResult(i, { status: STATUS.DONE, id: saveResult.applicantId });
+          const finalStatus = saveResult.isUpdate ? STATUS.UPDATED : STATUS.DONE;
+          updateResult(i, { status: finalStatus, id: saveResult.applicantId });
         } else {
           updateResult(i, { status: STATUS.FAILED, error: saveResult.error || 'Save failed' });
         }
       } catch (e) {
+        // AI parsing failed (e.g., rate limit) — stop processing, mark remaining as failed
         updateResult(i, { status: STATUS.FAILED, error: e.message });
+        for (let j = i + 1; j < files.length; j++) {
+          updateResult(j, { status: STATUS.FAILED, error: 'Stopped — AI parsing failed on previous resume' });
+        }
+        break;
       }
     }
 
@@ -431,6 +461,7 @@ function BulkUpload({ adminName }) {
   };
 
   const doneCount = results.filter(r => r.status === STATUS.DONE).length;
+  const updatedCount = results.filter(r => r.status === STATUS.UPDATED).length;
   const failedCount = results.filter(r => r.status === STATUS.FAILED).length;
 
   return (
@@ -501,8 +532,12 @@ function BulkUpload({ adminName }) {
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
           {started && (
             <div style={{ padding: '10px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Progress: {doneCount + failedCount} / {files.length}</span>
-              <span style={{ fontSize: '12px', color: '#059669', fontWeight: 600 }}>{doneCount} saved • <span style={{ color: '#dc3545' }}>{failedCount} failed</span></span>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Progress: {doneCount + updatedCount + failedCount} / {files.length}</span>
+              <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                <span style={{ color: '#059669' }}>{doneCount} added</span>
+                {updatedCount > 0 && <span style={{ color: '#d97706' }}> • {updatedCount} updated</span>}
+                {failedCount > 0 && <span style={{ color: '#dc3545' }}> • {failedCount} failed</span>}
+              </span>
             </div>
           )}
           <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
@@ -510,11 +545,11 @@ function BulkUpload({ adminName }) {
               <div key={i} style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
                 padding: '10px 16px', borderBottom: i < results.length - 1 ? '1px solid #f1f5f9' : 'none',
-                background: r.status === STATUS.PARSING || r.status === STATUS.SAVING ? '#fffbeb' : '#fff'
+                background: r.status === STATUS.PARSING || r.status === STATUS.SAVING ? '#fffbeb' : r.status === STATUS.UPDATED ? '#fffbeb' : '#fff'
               }}>
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
-                  background: r.status === STATUS.DONE ? '#059669' : r.status === STATUS.FAILED ? '#dc3545' : r.status === STATUS.WAITING ? '#f1f5f9' : '#f59e0b',
+                  background: r.status === STATUS.DONE ? '#059669' : r.status === STATUS.UPDATED ? '#d97706' : r.status === STATUS.FAILED ? '#dc3545' : r.status === STATUS.WAITING ? '#f1f5f9' : '#f59e0b',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
                 }}>
                   {r.status === STATUS.DONE ? <FiCheck size={12} /> :
@@ -527,7 +562,16 @@ function BulkUpload({ adminName }) {
                   {r.error && <div style={{ fontSize: '11px', color: '#dc2626' }}>{r.error}</div>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                  {r.id && <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', background: '#f0fdf4', padding: '2px 8px', borderRadius: '10px' }}>ID #{r.id}</span>}
+                  {r.id && (
+                    <span style={{
+                      fontSize: '11px', fontWeight: 700,
+                      color: r.status === STATUS.UPDATED ? '#b45309' : '#059669',
+                      background: r.status === STATUS.UPDATED ? '#fffbeb' : '#f0fdf4',
+                      padding: '2px 8px', borderRadius: '10px'
+                    }}>
+                      {r.status === STATUS.UPDATED ? '↻' : '+'} ID #{r.id}
+                    </span>
+                  )}
                   <span style={{ fontSize: '11px', fontWeight: 600, color: statusColor[r.status] }}>{statusLabel[r.status]}</span>
                 </div>
               </div>
@@ -550,7 +594,7 @@ function BulkUpload({ adminName }) {
       {started && !processing && (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '14px', fontWeight: 700, color: '#059669', marginBottom: '8px' }}>
-            ✓ Batch complete — {doneCount} saved, {failedCount} failed
+            ✓ Batch complete — {doneCount} added{updatedCount > 0 ? `, ${updatedCount} updated` : ''}{failedCount > 0 ? `, ${failedCount} failed` : ''}
           </div>
           <button onClick={() => { setFiles([]); setResults([]); setStarted(false); }} style={{
             padding: '10px 24px', background: '#0B2F5B', color: '#fff',
@@ -567,7 +611,7 @@ function BulkUpload({ adminName }) {
 // ═══════════════════════════════════════════
 export default function AdminCVUpload() {
   const [mode, setMode] = useState('single');
-  const adminName = sessionStorage.getItem('bnc_admin_id') || 'Admin';
+  const adminName = sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin';
 
   const tabStyle = (active) => ({
     flex: 1, padding: '11px 16px', border: 'none', cursor: 'pointer',

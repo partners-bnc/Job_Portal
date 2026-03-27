@@ -9,7 +9,11 @@ const DATABASE_HEADERS = [
   'Current Location', 'Current Company', 'Current Position', 'Total Experience',
   'Education', 'Skills', 'CV Summary', 'Job Applied For', 'Job ID', 'Resume Link',
   'Uploaded By', 'Created On', 'AI Score', 'AI Analysis', 'Shortlisting Decision',
-  'Shortlisting Reason', 'Status'
+  'Shortlisting Reason', 'Status', 'Certification', 'Relevant Experience',
+  'Current CTC', 'Expected Pay', 'Notice Period', 'Process Knowledge',
+  'Reason for Change', 'Work Authorization', 'Recruiter Comments', 'Aadhar Number',
+  'Nationality', 'Language Details', 'Technical Skills Rating', 'Communication Skills Rating',
+  'Professionalism Rating', 'Overall Rating', 'Last Viewed By', 'Updated On'
 ];
 
 function doGet(e) {
@@ -30,6 +34,8 @@ function doGet(e) {
     return getClients();
   } else if (action === 'getClientJobs') {
     return getClientJobs();
+  } else if (action === 'getHRs') {
+    return getHRs();
   }
 
   console.log('Invalid GET action received:', action);
@@ -80,6 +86,8 @@ function doPost(e) {
       return updateClientJob(data);
     } else if (data.action === 'removeShortlist') {
       return removeShortlist(data);
+    } else if (data.action === 'updateLastViewedBy') {
+      return updateLastViewedBy(data);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ error: 'Invalid POST action' }))
@@ -110,14 +118,53 @@ function getOrCreateDatabaseSheet() {
 
 function getNextApplicantId(sheet) {
   const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return 1; // Only header or empty
+  if (lastRow <= 1) return 'a001';
+  
   const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  let maxId = 0;
+  
+  let maxLetter = 'a';
+  let maxNum = 0;
+  
   for (let i = 0; i < ids.length; i++) {
-    const val = parseInt(ids[i][0]);
-    if (!isNaN(val) && val > maxId) maxId = val;
+    const idStr = ids[i][0] ? ids[i][0].toString().trim().toLowerCase() : '';
+    const match = idStr.match(/^([a-z]+)(\d+)$/);
+    if (match) {
+      const letter = match[1];
+      const num = parseInt(match[2], 10);
+      
+      if (letter > maxLetter || (letter === maxLetter && num > maxNum)) {
+        maxLetter = letter;
+        maxNum = num;
+      }
+    } else {
+      const val = parseInt(idStr, 10);
+      if (!isNaN(val) && val > maxNum) {
+        maxNum = val;
+      }
+    }
   }
-  return maxId + 1;
+  
+  if (maxNum >= 1000) {
+    let res = '';
+    let carry = true;
+    for (let i = maxLetter.length - 1; i >= 0; i--) {
+      if (carry) {
+        if (maxLetter.charCodeAt(i) === 122) { // 'z'
+          res = 'a' + res;
+        } else {
+          res = String.fromCharCode(maxLetter.charCodeAt(i) + 1) + res;
+          carry = false;
+        }
+      } else {
+        res = maxLetter[i] + res;
+      }
+    }
+    if (carry) res = 'a' + res;
+    return res + '001';
+  } else {
+    const nextNum = maxNum + 1;
+    return maxLetter + String(nextNum).padStart(3, '0');
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -142,12 +189,18 @@ function adminLogin(data) {
 
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
-      const sheetLoginId = rows[i][0] ? rows[i][0].toString().trim() : '';
-      const sheetPassword = rows[i][1] ? rows[i][1].toString().trim() : '';
+      // Assuming columns: Srno(0), Hr name(1), Email(2), Password(3), Phone(4)
+      const sheetEmail = rows[i][2] ? rows[i][2].toString().trim() : '';
+      const sheetPassword = rows[i][3] ? rows[i][3].toString().trim() : '';
+      const hrName = rows[i][1] ? rows[i][1].toString().trim() : sheetEmail;
 
-      if (sheetLoginId === loginId && sheetPassword === password) {
-        console.log('Admin login successful for:', loginId);
-        return ContentService.createTextOutput(JSON.stringify({ success: true, loginId: loginId }))
+      if (sheetEmail.toLowerCase() === loginId.toLowerCase() && sheetPassword === password) {
+        console.log('Admin login successful for:', sheetEmail);
+        return ContentService.createTextOutput(JSON.stringify({ 
+          success: true, 
+          loginId: sheetEmail,
+          hrName: hrName 
+        }))
           .setMimeType(ContentService.MimeType.JSON);
       }
     }
@@ -162,6 +215,35 @@ function adminLogin(data) {
   }
 }
 
+function getHRs() {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Admin Login');
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({ error: '"Admin Login" sheet not found.' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const rows = sheet.getDataRange().getValues();
+    const hrs = [];
+    
+    // Header is row 0. We iterate starting from row 1.
+    // Columns: Srno(0), HR Name(1), Email(2), Password(3), Phone(4)
+    for (let i = 1; i < rows.length; i++) {
+      const hrName = rows[i][1] ? rows[i][1].toString().trim() : '';
+      const email = rows[i][2] ? rows[i][2].toString().trim() : '';
+      if (hrName) {
+        hrs.push({ hrName: hrName, email: email });
+      }
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: true, hrs: hrs }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 // ─────────────────────────────────────────────
 // CV UPLOAD TO DATABASE (HR Upload)
 // ─────────────────────────────────────────────
@@ -169,13 +251,89 @@ function adminLogin(data) {
 function uploadCVToDatabase(data) {
   try {
     const dbSheet = getOrCreateDatabaseSheet();
-    const applicantId = getNextApplicantId(dbSheet);
     const now = new Date();
 
+    // ── Duplicate Detection: match by email or phone ──
+    const newEmail = (data.email || '').toString().trim().toLowerCase();
+    const newPhone = (data.contactNumber || '').toString().replace(/[^0-9]/g, '').trim();
+    let matchedRow = -1;
+
+    if (newEmail || newPhone) {
+      const lastRow = dbSheet.getLastRow();
+      if (lastRow > 1) {
+        // Read email (col E = 5) and phone (col F = 6) for all data rows
+        const emails = dbSheet.getRange(2, 5, lastRow - 1, 1).getValues();
+        const phones = dbSheet.getRange(2, 6, lastRow - 1, 1).getValues();
+
+        for (let i = 0; i < emails.length; i++) {
+          const existEmail = (emails[i][0] || '').toString().trim().toLowerCase();
+          const existPhone = (phones[i][0] || '').toString().replace(/[^0-9]/g, '').trim();
+
+          const emailMatch = newEmail && existEmail && newEmail === existEmail;
+          const phoneMatch = newPhone && existPhone && newPhone === existPhone;
+
+          if (emailMatch || phoneMatch) {
+            matchedRow = i + 2; // sheet rows are 1-indexed, data starts at row 2
+            break;
+          }
+        }
+      }
+    }
+
+    // Upload resume to Drive
     let resumeUrl = 'No resume uploaded';
     if (data.resumeData && data.resumeFileName && data.candidateName) {
       resumeUrl = uploadResumeToGoogleDrive(data.resumeData, data.resumeFileName, data.candidateName);
     }
+
+    if (matchedRow > 0) {
+      // ── UPDATE existing row ──
+      const existingRow = dbSheet.getRange(matchedRow, 1, 1, DATABASE_HEADERS.length).getValues()[0];
+      const applicantId = existingRow[0]; // Preserve original Applicant ID
+      const originalCreatedOn = existingRow[17]; // Preserve original Created On (col R, index 17)
+
+      // Updatable fields (indices): name(3), email(4), phone(5), location(6),
+      // company(7), position(8), experience(9), education(10), skills(11),
+      // summary(12), resume(15), uploadedBy(16), certification(23)
+      existingRow[3]  = data.candidateName || existingRow[3];
+      existingRow[4]  = data.email || existingRow[4];
+      existingRow[5]  = data.contactNumber ? "'" + data.contactNumber : existingRow[5];
+      existingRow[6]  = data.currentLocation || existingRow[6];
+      existingRow[7]  = data.currentCompany || existingRow[7];
+      existingRow[8]  = data.currentPosition || existingRow[8];
+      existingRow[9]  = data.totalExperience || existingRow[9];
+      existingRow[10] = data.education || existingRow[10];
+      existingRow[11] = data.skills || existingRow[11];
+      existingRow[12] = data.summary || existingRow[12];
+      existingRow[15] = resumeUrl !== 'No resume uploaded' ? resumeUrl : existingRow[15];
+      existingRow[16] = data.uploadedBy || existingRow[16];
+      existingRow[17] = originalCreatedOn; // Keep original created date
+      existingRow[23] = data.certifications || existingRow[23];
+      // Source update
+      existingRow[2]  = data.source || existingRow[2];
+
+      // Set 'Updated On' timestamp (last column)
+      existingRow[DATABASE_HEADERS.length - 1] = now;
+
+      // Clear old AI analysis so it can be re-run on updated resume
+      existingRow[18] = ''; // AI Score
+      existingRow[19] = ''; // AI Analysis
+      existingRow[20] = ''; // Shortlisting Decision
+      existingRow[21] = ''; // Shortlisting Reason
+
+      dbSheet.getRange(matchedRow, 1, 1, DATABASE_HEADERS.length).setValues([existingRow]);
+      console.log('CV updated for existing Applicant ID:', applicantId);
+
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        isUpdate: true,
+        applicantId: applicantId,
+        message: 'Duplicate found — existing record updated successfully'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // ── No match: INSERT new row ──
+    const applicantId = getNextApplicantId(dbSheet);
 
     const rowData = [
       applicantId,
@@ -183,7 +341,7 @@ function uploadCVToDatabase(data) {
       data.source || 'HR Upload',
       data.candidateName || '',
       data.email || '',
-      data.contactNumber ? `'${data.contactNumber}` : '',
+      data.contactNumber ? "'" + data.contactNumber : '',
       data.currentLocation || '',
       data.currentCompany || '',
       data.currentPosition || '',
@@ -191,13 +349,19 @@ function uploadCVToDatabase(data) {
       data.education || '',
       data.skills || '',
       data.summary || '',
-      '', // Job Applied For — N/A for HR uploads
-      '', // Job ID — N/A for HR uploads
+      '', // Job Applied For
+      '', // Job ID
       resumeUrl,
       data.uploadedBy || 'Admin',
       now,
-      '', '', '', '', // AI fields — empty initially
-      'In Database'  // Status
+      '', '', '', '', // AI fields
+      'In Database', // Status
+      data.certifications || '', '', '', '', // Certification, Relevant Exp, Current CTC, Expected Pay
+      '', '', '', '', // Notice Period, Process Knowledge, Reason for Change, Work Auth
+      '', '', '', '', // Recruiter Comments, Aadhar Number, Nationality, Language Details
+      '', '', '', '', // Tech Skills, Comm Skills, Professionalism, Overall
+      '', // Last Viewed By
+      ''  // Updated On (empty for new records)
     ];
 
     dbSheet.appendRow(rowData);
@@ -205,6 +369,7 @@ function uploadCVToDatabase(data) {
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
+      isUpdate: false,
       applicantId: applicantId,
       message: 'CV uploaded and saved to database successfully'
     })).setMimeType(ContentService.MimeType.JSON);
@@ -270,10 +435,27 @@ function updateDatabaseCandidate(data) {
       data.aiAnalysis !== undefined ? data.aiAnalysis : existingRow[19],
       data.shortlistDecision !== undefined ? data.shortlistDecision : existingRow[20],
       data.shortlistReason !== undefined ? data.shortlistReason : existingRow[21],
-      data.status !== undefined ? data.status : existingRow[22]
+      data.status !== undefined ? data.status : existingRow[22],
+      data.certification !== undefined ? data.certification : (existingRow[23] || ''),
+      data.relevantExperience !== undefined ? data.relevantExperience : (existingRow[24] || ''),
+      data.currentCTC !== undefined ? data.currentCTC : (existingRow[25] || ''),
+      data.expectedPay !== undefined ? data.expectedPay : (existingRow[26] || ''),
+      data.noticePeriod !== undefined ? data.noticePeriod : (existingRow[27] || ''),
+      data.processKnowledge !== undefined ? data.processKnowledge : (existingRow[28] || ''),
+      data.reasonForChange !== undefined ? data.reasonForChange : (existingRow[29] || ''),
+      data.workAuthorization !== undefined ? data.workAuthorization : (existingRow[30] || ''),
+      data.recruiterComments !== undefined ? data.recruiterComments : (existingRow[31] || ''),
+      data.aadharNumber !== undefined ? data.aadharNumber : (existingRow[32] || ''),
+      data.nationality !== undefined ? data.nationality : (existingRow[33] || ''),
+      data.language !== undefined ? data.language : (existingRow[34] || ''),
+      data.technicalRating !== undefined ? data.technicalRating : (existingRow[35] || ''),
+      data.communicationRating !== undefined ? data.communicationRating : (existingRow[36] || ''),
+      data.professionalismRating !== undefined ? data.professionalismRating : (existingRow[37] || ''),
+      data.overallRating !== undefined ? data.overallRating : (existingRow[38] || ''),
+      existingRow[39] || '' // Last Viewed By
     ];
 
-    dbSheet.getRange(targetRow, 4, 1, 20).setValues([updatedValues]);
+    dbSheet.getRange(targetRow, 4, 1, 37).setValues([updatedValues]);
     console.log('Database candidate updated, ID:', applicantId);
 
     return ContentService.createTextOutput(JSON.stringify({
@@ -327,7 +509,24 @@ function getDatabaseCandidates() {
         aiAnalysis:   row[19] || '',
         shortlistDecision: row[20] || '',
         shortlistReason:   row[21] || '',
-        status:       row[22] || 'Applied'
+        status:       row[22] || 'Applied',
+        certification: row[23] || '',
+        relevantExperience: row[24] || '',
+        currentCTC: row[25] || '',
+        expectedPay: row[26] || '',
+        noticePeriod: row[27] || '',
+        processKnowledge: row[28] || '',
+        reasonForChange: row[29] || '',
+        workAuthorization: row[30] || '',
+        recruiterComments: row[31] || '',
+        aadharNumber: row[32] || '',
+        nationality: row[33] || '',
+        language: row[34] || '',
+        technicalRating: row[35] !== undefined ? row[35] : '',
+        communicationRating: row[36] !== undefined ? row[36] : '',
+        professionalismRating: row[37] !== undefined ? row[37] : '',
+        overallRating: row[38] !== undefined ? row[38] : '',
+        lastViewedBy: row[39] || ''
       });
     }
 
@@ -814,7 +1013,7 @@ function shortlistCandidate(data) {
       data.company || '',
       data.shortlistedBy || 'Admin',
       now,
-      data.jobCode || ''
+      (data.jobCode || '').toString().trim()
     ]);
 
     // 2. Update status in Database sheet
@@ -844,20 +1043,19 @@ function shortlistCandidate(data) {
 
 function removeShortlist(data) {
   try {
-    const applicantId = data.applicantId ? data.applicantId.toString() : '';
-    const jobCode = data.jobCode || '';
+    var applicantId = data.applicantId ? data.applicantId.toString() : '';
+    var jobCode = data.jobCode ? data.jobCode.toString().trim() : '';
     
     // 1. Remove from Shortlisted sheet
-    const shortSheet = getOrCreateShortlistedSheet();
-    const shortRows = shortSheet.getDataRange().getValues();
-    let rowToDelete = -1;
+    var shortSheet = getOrCreateShortlistedSheet();
+    var shortRows = shortSheet.getDataRange().getValues();
+    var rowToDelete = -1;
     
-    for (let i = 1; i < shortRows.length; i++) {
-      // Column index 0 is Applicant ID, index 6 is Job Code
-      const rowAppId = shortRows[i][0] ? shortRows[i][0].toString() : '';
-      const rowJobCode = shortRows[i][6] ? shortRows[i][6].toString() : '';
+    for (var i = 1; i < shortRows.length; i++) {
+      var rowAppId = shortRows[i][0] ? shortRows[i][0].toString().trim() : '';
+      var rowJobCode = shortRows[i][6] ? shortRows[i][6].toString().trim() : '';
       
-      if (rowAppId === applicantId && rowJobCode === jobCode) {
+      if (rowAppId === applicantId && (!jobCode || rowJobCode === jobCode)) {
         rowToDelete = i + 1;
         break;
       }
@@ -867,24 +1065,36 @@ function removeShortlist(data) {
       shortSheet.deleteRow(rowToDelete);
     }
 
-    // 2. Revert status in Database sheet
-    const dbSheet = getOrCreateDatabaseSheet();
-    const dbRows = dbSheet.getDataRange().getValues();
-    let targetDbRow = -1;
+    // 2. Check if candidate still has ANY other shortlist records
+    var remainingRows = shortSheet.getDataRange().getValues();
+    var hasOtherShortlists = false;
+    for (var i = 1; i < remainingRows.length; i++) {
+      var rowAppId = remainingRows[i][0] ? remainingRows[i][0].toString().trim() : '';
+      if (rowAppId === applicantId) {
+        hasOtherShortlists = true;
+        break;
+      }
+    }
 
-    for (let i = 1; i < dbRows.length; i++) {
-      if (dbRows[i][0] && dbRows[i][0].toString() === applicantId) {
+    // 3. Update Database sheet status based on actual shortlist state
+    var dbSheet = getOrCreateDatabaseSheet();
+    var dbRows = dbSheet.getDataRange().getValues();
+    var targetDbRow = -1;
+
+    for (var i = 1; i < dbRows.length; i++) {
+      if (dbRows[i][0] && dbRows[i][0].toString().trim() === applicantId) {
         targetDbRow = i + 1;
         break;
       }
     }
     
     if (targetDbRow > -1) {
-      // Set status back to 'In Database' (reverting from 'Shortlisted')
-      dbSheet.getRange(targetDbRow, 23).setValue('In Database'); 
+      if (!hasOtherShortlists) {
+        dbSheet.getRange(targetDbRow, 23).setValue('In Database');
+      }
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+    return ContentService.createTextOutput(JSON.stringify({ success: true, hasOtherShortlists: hasOtherShortlists }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     console.log('Error in removeShortlist:', error.toString());
@@ -1083,9 +1293,9 @@ function getOrCreateClientJobsSheet() {
   let sheet = ss.getSheetByName('ClientJobs');
   if (!sheet) {
     sheet = ss.insertSheet('ClientJobs');
-    const headers = ['Job Code', 'Job Title', 'Business Unit', 'Client Name', 'Client ID', 'Location', 'State', 'Country', 'Pay Rate / Salary', 'Years of Experience', 'Job Description', 'Created By', 'Created On', 'Recruitment Manager', 'Status', 'Modified On', 'Modified By'];
+    const headers = ['Job Code', 'Job Title', 'Business Unit', 'Client Name', 'Client ID', 'Location', 'State', 'Country', 'Pay Rate / Salary', 'Years of Experience', 'Job Description', 'Created By', 'Created On', 'Recruitment Manager', 'Status', 'Modified On', 'Modified By', 'Priority', 'Assigned To'];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.getRange('A1:Q1').setFontWeight('bold');
+    sheet.getRange('A1:S1').setFontWeight('bold');
   }
   return sheet;
 }
@@ -1116,7 +1326,9 @@ function getClientJobs() {
           recruitmentManager: row[13] || '',
           status: row[14] || '',
           modifiedOn: row[15] ? new Date(row[15]).toISOString() : '',
-          modifiedBy: row[16] || ''
+          modifiedBy: row[16] || '',
+          priority: row[17] || 'Medium',
+          assignedTo: row[18] || ''
         });
       }
     }
@@ -1148,7 +1360,9 @@ function addClientJob(data) {
       data.recruitmentManager || '',
       data.status || 'Active',
       '', // modifiedOn
-      ''  // modifiedBy
+      '',  // modifiedBy
+      data.priority || 'Medium',
+      data.assignedTo || ''
     ]);
 
     return ContentService.createTextOutput(JSON.stringify({ success: true, jobCode: data.jobCode, message: 'Client Job added successfully' })).setMimeType(ContentService.MimeType.JSON);
@@ -1199,10 +1413,12 @@ function updateClientJob(data) {
       data.recruitmentManager !== undefined ? data.recruitmentManager : rowData[13],
       data.status !== undefined ? data.status : rowData[14],
       now,         // modifiedOn
-      data.modifiedBy || 'Admin'  // modifiedBy
+      data.modifiedBy || 'Admin',  // modifiedBy
+      data.priority !== undefined ? data.priority : (rowData[17] || 'Medium'),
+      data.assignedTo !== undefined ? data.assignedTo : (rowData[18] || '')
     ];
 
-    sheet.getRange(targetRow, 1, 1, 17).setValues([updatedRow]);
+    sheet.getRange(targetRow, 1, 1, 19).setValues([updatedRow]);
 
     return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Client Job updated successfully' })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
@@ -1210,3 +1426,43 @@ function updateClientJob(data) {
   }
 }
 
+// ─────────────────────────────────────────────
+// RECORD LAST VIEWED BY
+// ─────────────────────────────────────────────
+
+function updateLastViewedBy(data) {
+  try {
+    var applicantId = data.applicantId ? data.applicantId.toString() : null;
+    var viewedBy = data.viewedBy || 'Unknown';
+
+    if (!applicantId) {
+      return ContentService.createTextOutput(JSON.stringify({ error: 'Applicant ID is required' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var dbSheet = getOrCreateDatabaseSheet();
+    var rows = dbSheet.getDataRange().getValues();
+    var targetRow = -1;
+
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][0] && rows[i][0].toString() === applicantId) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+
+    if (targetRow === -1) {
+      return ContentService.createTextOutput(JSON.stringify({ error: 'Applicant not found: ' + applicantId }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Column 'Last Viewed By' is the 40th column
+    dbSheet.getRange(targetRow, 40).setValue(viewedBy);
+
+    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Updated Last Viewed By', applicantId: applicantId }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}

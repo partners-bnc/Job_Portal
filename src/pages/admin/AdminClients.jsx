@@ -102,8 +102,8 @@ export default function AdminClients() {
       const payload = {
         ...formData,
         website: formattedWebsite,
-        createdBy: sessionStorage.getItem('bnc_admin_id') || 'Admin',
-        modifiedBy: sessionStorage.getItem('bnc_admin_id') || 'Admin'
+        createdBy: sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin',
+        modifiedBy: sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin'
       };
       
       let res;

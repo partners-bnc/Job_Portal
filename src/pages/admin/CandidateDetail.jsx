@@ -43,6 +43,11 @@ const STATUS_OPTIONS = ['Applied', 'In Database', 'Shortlisted', 'Rejected', 'In
 const SOURCE_OPTIONS = ['Job Application', 'HR Upload', 'LinkedIn', 'Naukri', 'Indeed', 'Referral', 'Walk-in', 'Company Website', 'Other'];
 const EXP_OPTIONS = ['0', '1', '2', '3', '4', '5', '6-10', '10+'];
 const NOTICE_OPTIONS = ['Immediate', '15 Days', '1 Month', '2 Months', '3 Months'];
+const WORK_AUTH_OPTIONS = ['Citizen', 'Permanent Resident', 'Work Visa', 'Student Visa', 'Requires Sponsorship', 'Not Authorized', 'Other'];
+const LANGUAGE_OPTIONS = ['English', 'Hindi', 'Spanish', 'French', 'German', 'Mandarin', 'Arabic', 'Bengali', 'Russian', 'Portuguese', 'Japanese', 'Other'];
+const COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo, Democratic Republic of the", "Congo, Republic of the", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine State", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
+];
 
 // ── Reusable edit field ──
 function EditField({ label, value, onChange, type = 'text', options, multiline, disabled, placeholder, colSpan }) {
@@ -103,6 +108,36 @@ export default function CandidateDetail() {
   const [showShortlistModal, setShowShortlistModal] = useState(false);
   const [clientJobs, setClientJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
+  
+  const [rightTab, setRightTab] = useState('Applicant');
+  const [ratings, setRatings] = useState({
+    technical: 0,
+    communication: 0,
+    professionalism: 0,
+    overall: 0
+  });
+
+  const [tempLang, setTempLang] = useState('');
+  const [tempRead, setTempRead] = useState(true);
+  const [tempSpeak, setTempSpeak] = useState(true);
+  const [tempWrite, setTempWrite] = useState(true);
+
+  const handleAddLanguage = () => {
+    if (!tempLang) return;
+    const skills = [];
+    if (tempRead) skills.push('Read');
+    if (tempSpeak) skills.push('Speak');
+    if (tempWrite) skills.push('Write');
+    
+    const newLangEntry = skills.length > 0 ? `${tempLang} (${skills.join(', ')})` : tempLang;
+    const current = form.language ? form.language.trim() : '';
+    const updated = current ? `${current}, ${newLangEntry}` : newLangEntry;
+    
+    upd('language', updated);
+    
+    setTempLang('');
+    setTempRead(true); setTempSpeak(true); setTempWrite(true);
+  };
 
   useEffect(() => {
     (async () => {
@@ -114,6 +149,14 @@ export default function CandidateDetail() {
       if (c) { 
         setCandidate(c); 
         setForm({ ...c }); 
+        setRatings({
+          technical: c.technicalRating ? parseInt(c.technicalRating) : 0,
+          communication: c.communicationRating ? parseInt(c.communicationRating) : 0,
+          professionalism: c.professionalismRating ? parseInt(c.professionalismRating) : 0,
+          overall: c.overallRating ? parseInt(c.overallRating) : 0
+        });
+        const viewer = sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || sessionStorage.getItem('loginId') || 'Recruiter/Admin';
+        jobService.updateLastViewedBy(id, viewer);
       } else {
         setError('Applicant not found.');
       }
@@ -158,6 +201,12 @@ export default function CandidateDetail() {
       callStatus: form.callStatus || '',
       relevantExperience: form.relevantExperience || '',
       referredBy: form.referredBy || '',
+      certification: form.certification || '',
+      language: form.language || '',
+      technicalRating: ratings.technical || 0,
+      communicationRating: ratings.communication || 0,
+      professionalismRating: ratings.professionalism || 0,
+      overallRating: ratings.overall || 0,
     });
     if (result.success) {
       setCandidate({ ...form });
@@ -173,7 +222,7 @@ export default function CandidateDetail() {
   const handleShortlistSubmit = async (role, company, jobCode) => {
     setSaving(true);
     setSaveMsg('Saving...');
-    const hrName = sessionStorage.getItem('bnc_admin_id') || 'Admin';
+    const hrName = sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin';
     const result = await jobService.shortlistCandidate({
       applicantId: candidate.applicantId,
       name: candidate.name,
@@ -245,68 +294,127 @@ export default function CandidateDetail() {
     </div>
   );
 
-  // ── Snapshot Tab ──
-  const SnapshotContent = () => (
-    <div>
-      {/* Header Card */}
+  const HeaderCard = () => (
+    <div style={{
+      background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0',
+      padding: '22px 24px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '16px'
+    }}>
       <div style={{
-        background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0',
-        padding: '22px 24px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '16px'
-      }}>
-        <div style={{
-          width: '54px', height: '54px', borderRadius: '50%', flexShrink: 0,
-          background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '20px', fontWeight: 800, color: '#fff'
-        }}>{(candidate.name || 'A').charAt(0).toUpperCase()}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '18px', fontWeight: 800, color: '#1e293b' }}>
-            {candidate.applicantId} - {candidate.name}
-          </div>
-          <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>{candidate.currentPosition || 'Position N/A'}</div>
-          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {candidate.currentLocation && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiMapPin size={11} /> {candidate.currentLocation}</span>}
-            {candidate.contactNumber && <a href={`tel:${candidate.contactNumber}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#0B2F5B', fontWeight: 600, textDecoration: 'none' }}><FiPhone size={11} /> {candidate.contactNumber}</a>}
-            {candidate.email && <a href={`mailto:${candidate.email}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#0B2F5B', fontWeight: 600, textDecoration: 'none' }}><FiMail size={11} /> {candidate.email}</a>}
-          </div>
-          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '6px' }}>
-            Created By & On - <strong>{candidate.uploadedBy || 'N/A'}</strong> & {fmtDate(candidate.createdOn)}
-          </div>
-          {/* Action buttons */}
-          <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button onClick={() => { setEditing(true); setTab('personal'); }} style={{
+        width: '54px', height: '54px', borderRadius: '50%', flexShrink: 0,
+        background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '20px', fontWeight: 800, color: '#fff'
+      }}>{(candidate.name || 'A').charAt(0).toUpperCase()}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: '18px', fontWeight: 800, color: '#1e293b', lineHeight: '24px' }}>
+          {candidate.applicantId} - {candidate.name}
+        </div>
+        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>{candidate.currentPosition || 'Position N/A'}</div>
+        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {candidate.currentLocation && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FiMapPin size={11} /> {candidate.currentLocation}</span>}
+          
+          {candidate.contactNumber && <a href={`tel:${candidate.contactNumber}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#6CB1F9', fontWeight: 600, textDecoration: 'none' }}><FiPhone size={11} /> {candidate.contactNumber}</a>}
+          
+          {candidate.contactNumber && candidate.email && <span style={{ color: '#e2e8f0' }}>|</span>}
+          
+          {candidate.email && <a href={`mailto:${candidate.email}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#6CB1F9', fontWeight: 600, textDecoration: 'none' }}><FiMail size={11} /> {candidate.email}</a>}
+        </div>
+        <div style={{ fontSize: '11px', color: '#1e293b', marginTop: '8px', fontWeight: 600 }}>
+          Last Viewed By: <strong>{candidate.lastViewedBy || 'Just Now'}</strong>
+        </div>
+        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+          Created By & On - <strong>{candidate.uploadedBy || 'N/A'}</strong> & {fmtDate(candidate.createdOn)}
+        </div>
+        {/* Action buttons */}
+        <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={() => { setEditing(true); setTab('personal'); }} className="action-btn" style={{
+            padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: '6px',
+            background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#475569'
+          }}>Edit Applicant</button>
+          
+          <button disabled={candidate.status === 'Shortlisted'} onClick={() => setShowShortlistModal(true)} className="action-btn" style={{
+            padding: '6px 14px', border: candidate.status === 'Shortlisted' ? '1px solid #84cc16' : '1px solid #334155', borderRadius: '6px',
+            background: candidate.status === 'Shortlisted' ? '#f7fee7' : '#f8fafc', fontSize: '12px', fontWeight: 600, cursor: candidate.status === 'Shortlisted' ? 'default' : 'pointer', color: candidate.status === 'Shortlisted' ? '#4d7c0f' : '#334155',
+            display: 'inline-flex', alignItems: 'center', gap: '4px'
+          }}><FiTag size={11} /> {candidate.status === 'Shortlisted' ? 'Tagged' : 'Add Tag'}</button>
+
+          {candidate.resumeLink && candidate.resumeLink !== 'No resume uploaded' && (
+            <a href={candidate.resumeLink} target="_blank" rel="noopener noreferrer" className="action-btn" style={{
               padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: '6px',
-              background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#475569'
-            }}>Edit Applicant</button>
-            {candidate.resumeLink && candidate.resumeLink !== 'No resume uploaded' && (
-              <a href={candidate.resumeLink} target="_blank" rel="noopener noreferrer" style={{
-                padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: '6px',
-                background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#475569',
-                textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px'
-              }}>View Resume <FiExternalLink size={11} /></a>
-            )}
+              background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#475569',
+              textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px'
+            }}>View Resume <FiExternalLink size={11} /></a>
+          )}
+        </div>
+      </div>
+      {/* Rating / AI Box */}
+      <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '16px', marginTop: '4px' }}>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px', minWidth: '220px' }}>
+          {/* Stars */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+            {[
+              { key: 'technical', label: 'Technical Skills' },
+              { key: 'communication', label: 'Communication Skills' },
+              { key: 'professionalism', label: 'Professionalism' },
+              { key: 'overall', label: 'Overall Rating' }
+            ].map(item => (
+              <div key={item.key} style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>{item.label} : </span>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <span
+                      key={star}
+                      onClick={() => {
+                        setRatings(prev => ({ ...prev, [item.key]: star }));
+                        // Auto-save the specific rating
+                        jobService.updateDatabaseCandidate({
+                          applicantId: candidate.applicantId,
+                          [`${item.key}Rating`]: star
+                        });
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        color: star <= (ratings[item.key] || 0) ? '#fbbf24' : '#e2e8f0',
+                        fontSize: '16px',
+                        lineHeight: '1',
+                        transition: 'color 0.2s'
+                      }}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        {/* Rating / AI Box */}
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
           {candidate.aiScore !== null && candidate.aiScore !== undefined && candidate.aiScore !== '' && (
-            <div style={{ marginBottom: '8px' }}>
+            <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '3px' }}>AI Score</div>
               <span style={{
-                fontSize: '18px', fontWeight: 800,
+                fontSize: '16px', fontWeight: 800,
                 color: parseFloat(candidate.aiScore) >= 7 ? '#059669' : parseFloat(candidate.aiScore) >= 5 ? '#f59e0b' : '#dc3545'
               }}>{candidate.aiScore}/10</span>
             </div>
           )}
           {candidate.shortlistDecision && (
             <span style={{
-              padding: '3px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: 700,
+              padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 700,
               background: candidate.shortlistDecision === 'Shortlisted' ? '#f0fdf4' : '#fef2f2',
               color: candidate.shortlistDecision === 'Shortlisted' ? '#166534' : '#dc2626',
             }}>{candidate.shortlistDecision}</span>
           )}
         </div>
       </div>
+    </div>
+  );
+
+  // ── Snapshot Tab ──
+  const SnapshotContent = () => (
+    <div>
 
       {/* Notes / AI Analysis */}
       {candidate.aiAnalysis && (
@@ -365,11 +473,12 @@ export default function CandidateDetail() {
         <EditField label="Job Title / Position" value={form.currentPosition} onChange={v => upd('currentPosition', v)} disabled={!editing} />
         <EditField label="Process Knowledge" value={form.processKnowledge} onChange={v => upd('processKnowledge', v)} disabled={!editing} />
         <EditField label="Reason for Change" value={form.reasonForChange} onChange={v => upd('reasonForChange', v)} disabled={!editing} />
-        <EditField label="Recruiter's Comments" value={form.recruiterComments} onChange={v => upd('recruiterComments', v)} disabled={!editing} />
-        <EditField label="Work Authorization" value={form.workAuthorization} onChange={v => upd('workAuthorization', v)} disabled={!editing} />
+        <EditField label="Work Authorization" value={form.workAuthorization} onChange={v => upd('workAuthorization', v)} disabled={!editing} options={WORK_AUTH_OPTIONS} />
         <EditField label="Ownership / Uploaded By" value={form.uploadedBy} onChange={() => {}} disabled />
         <EditField label="Aadhar Number" value={form.aadharNumber} onChange={v => upd('aadharNumber', v)} disabled={!editing} />
-        <EditField label="Nationality" value={form.nationality} onChange={v => upd('nationality', v)} disabled={!editing} />
+        <EditField label="Nationality" value={form.nationality} onChange={v => upd('nationality', v)} disabled={!editing} options={COUNTRIES} />
+        <EditField label="Recruiter's Comments" value={form.recruiterComments} onChange={v => upd('recruiterComments', v)} disabled={!editing} colSpan={3} multiline />
+        <EditField label="Profile Summary" value={form.summary} onChange={v => upd('summary', v)} disabled={!editing} colSpan={3} multiline />
         <EditField label="Skills" value={form.skills} onChange={v => upd('skills', v)} disabled={!editing} colSpan={3} />
       </div>
     </div>
@@ -377,17 +486,74 @@ export default function CandidateDetail() {
 
   // ── Professional Details Tab ──
   const ProfessionalContent = () => (
-    <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px' }}>
-      <h3 style={{ margin: '0 0 20px', fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>Profession Details</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-        <EditField label="Job Applied For" value={form.jobAppliedFor} onChange={v => upd('jobAppliedFor', v)} disabled={!editing} />
-        <EditField label="Job ID" value={form.jobId} onChange={v => upd('jobId', v)} disabled={!editing} />
-        <EditField label="Status" value={form.status} onChange={v => upd('status', v)} disabled={!editing} options={STATUS_OPTIONS} />
-        <EditField label="Education / Qualification" value={form.education} onChange={v => upd('education', v)} disabled={!editing} colSpan={3} multiline />
-        <EditField label="Profile" value={form.profile} onChange={v => upd('profile', v)} disabled={!editing} />
-        <EditField label="Qualification" value={form.qualification} onChange={v => upd('qualification', v)} disabled={!editing} />
-        <EditField label="Preferred Location" value={form.preferredLocation} onChange={v => upd('preferredLocation', v)} disabled={!editing} />
-        <EditField label="Professional Summary" value={form.summary} onChange={v => upd('summary', v)} disabled={!editing} colSpan={3} multiline />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      
+      {/* Education Details */}
+      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>Education Details</h3>
+          {editing && <button className="simple-btn" style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>+ Add</button>}
+        </div>
+        <div style={{ padding: '24px' }}>
+          <EditField label="Education / Qualification" value={form.education} onChange={v => upd('education', v)} disabled={!editing} multiline />
+        </div>
+      </div>
+
+      {/* Certifications */}
+      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>Certifications</h3>
+          {editing && <button className="simple-btn" style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>+ Add</button>}
+        </div>
+        <div style={{ padding: '24px' }}>
+          <EditField label="Certification" value={form.certification} onChange={v => upd('certification', v)} disabled={!editing} multiline />
+        </div>
+      </div>
+
+
+      {/* Add Language Details */}
+      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>Add Language Details</h3>
+        </div>
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '8px', letterSpacing: '0.3px' }}>Saved Languages</label>
+            <div style={{ fontSize: '13px', color: '#1e293b', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '42px', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+              {form.language || 'No languages added yet.'}
+            </div>
+          </div>
+          
+          {editing && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start', padding: '16px', border: '1px dashed #cbd5e1', borderRadius: '8px', background: '#f8fafc' }}>
+              <div>
+                <EditField label="Select Language" value={tempLang} onChange={setTempLang} disabled={false} options={LANGUAGE_OPTIONS} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '10px', letterSpacing: '0.3px' }}>
+                  Proficiency Checklist
+                </label>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                  <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#1e293b' }}>
+                    <input type="checkbox" checked={tempRead} onChange={e => setTempRead(e.target.checked)} style={{ cursor: 'pointer' }} /> Read
+                  </label>
+                  <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#1e293b' }}>
+                    <input type="checkbox" checked={tempSpeak} onChange={e => setTempSpeak(e.target.checked)} style={{ cursor: 'pointer' }} /> Speak
+                  </label>
+                  <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#1e293b' }}>
+                    <input type="checkbox" checked={tempWrite} onChange={e => setTempWrite(e.target.checked)} style={{ cursor: 'pointer' }} /> Write
+                  </label>
+                </div>
+              </div>
+              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '12px', marginTop: '4px' }}>
+                <button onClick={handleAddLanguage} className="simple-btn" style={{ padding: '8px 16px' }}>Add Selected Language into Data</button>
+                <button onClick={() => upd('language', '')} className="simple-btn" style={{ padding: '8px 16px' }}>Clear All Selected Languages</button>
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
@@ -401,10 +567,7 @@ export default function CandidateDetail() {
         <EditField label="Current Position" value={form.currentPosition} onChange={v => upd('currentPosition', v)} disabled={!editing} />
         <EditField label="Total Experience" value={form.totalExperience} onChange={v => upd('totalExperience', v)} disabled={!editing} options={EXP_OPTIONS} />
         <EditField label="Current CTC" value={form.currentCTC} onChange={v => upd('currentCTC', v)} disabled={!editing} />
-        <EditField label="Expected Pay" value={form.expectedPay} onChange={v => upd('expectedPay', v)} disabled={!editing} />
         <EditField label="Notice Period" value={form.noticePeriod} onChange={v => upd('noticePeriod', v)} disabled={!editing} options={NOTICE_OPTIONS} />
-        <EditField label="Call Status" value={form.callStatus} onChange={v => upd('callStatus', v)} disabled={!editing} />
-        <EditField label="Referred By" value={form.referredBy} onChange={v => upd('referredBy', v)} disabled={!editing} />
         <EditField label="Relevant Profile Experience" value={form.relevantExperience} onChange={v => upd('relevantExperience', v)} disabled={!editing} />
       </div>
     </div>
@@ -504,6 +667,10 @@ export default function CandidateDetail() {
       <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .action-btn { transition: all 0.15s; }
+        .action-btn:active { transform: scale(0.95); }
+        .simple-btn { background: #fff; border: 1px solid #cbd5e1; color: #334155; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .simple-btn:active { transform: scale(0.95); }
       `}</style>
 
       {/* ── Top Tab Bar ── */}
@@ -570,21 +737,7 @@ export default function CandidateDetail() {
             </>
           ) : (
             <>
-            <button 
-              disabled={candidate.status === 'Shortlisted'}
-              onClick={() => setShowShortlistModal(true)} 
-              style={{
-                display: 'flex', alignItems: 'center', gap: '5px',
-                padding: '6px 14px', 
-                background: candidate.status === 'Shortlisted' ? '#059669' : '#0B2F5B', 
-                color: '#fff',
-                border: 'none', borderRadius: '6px', 
-                cursor: candidate.status === 'Shortlisted' ? 'default' : 'pointer',
-                fontSize: '11px', fontWeight: 600
-            }}>
-              <FiCheckCircle size={12} /> {candidate.status === 'Shortlisted' ? 'Shortlisted' : 'Shortlist Candidate'}
-            </button>
-            <button onClick={() => setEditing(true)} style={{
+            <button onClick={() => setEditing(true)} className="action-btn" style={{
               display: 'flex', alignItems: 'center', gap: '5px',
               padding: '6px 14px', background: '#fff', color: '#0B2F5B',
               border: '1px solid #0B2F5B40', borderRadius: '6px', cursor: 'pointer',
@@ -600,6 +753,7 @@ export default function CandidateDetail() {
       {/* ── Body: Left Content + Right Sidebar ── */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', background: '#f7f9fc' }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
+          <HeaderCard />
           <div style={{ animation: 'fadeIn 0.3s ease' }}>
             {ActiveTabComponent()}
           </div>
@@ -669,7 +823,7 @@ export default function CandidateDetail() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Action By (HR)</label>
-                  <input readOnly value={sessionStorage.getItem('bnc_admin_id') || 'Admin'} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', background: '#f8fafc', color: '#475569', outline: 'none', boxSizing: 'border-box', fontWeight: 600 }} />
+                  <input readOnly value={sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin'} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', background: '#f8fafc', color: '#475569', outline: 'none', boxSizing: 'border-box', fontWeight: 600 }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Date</label>

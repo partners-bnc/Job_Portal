@@ -1,90 +1,57 @@
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXnrv8UT35fNC5OdgEUdTvrhZCxC0n5EmWnY2jCodvINquAKYfzY-UYEa4O4fvtphE7Q/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbziRkUxbsyIdhaj1t1sN2YVGVbJvcxHRUrN2kJhHiL_Zs3zscTBKNj3D9A8EYg4T-qTnQ/exec';
+
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+const cache = {
+  jobs: { data: null, timestamp: 0 },
+  candidates: { data: null, timestamp: 0 },
+  databaseCandidates: { data: null, timestamp: 0 },
+  shortlisted: { data: null, timestamp: 0 },
+  clients: { data: null, timestamp: 0 },
+  clientJobs: { data: null, timestamp: 0 },
+  hrs: { data: null, timestamp: 0 }
+};
 
 export const jobService = {
+  clearCache(key) {
+    if (key && cache[key]) {
+      cache[key] = { data: null, timestamp: 0 };
+    } else {
+      Object.keys(cache).forEach(k => cache[k] = { data: null, timestamp: 0 });
+    }
+  },
+
   async fetchJobs() {
+    if (cache.jobs.data && Date.now() - cache.jobs.timestamp < CACHE_DURATION) {
+      return cache.jobs.data;
+    }
     try {
-      console.log('Fetching jobs from:', `${SCRIPT_URL}?action=getJobs`);
       const response = await fetch(`${SCRIPT_URL}?action=getJobs`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
+        method: 'GET', headers: { 'Accept': 'application/json' }
       });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
-      console.log('Jobs response:', data);
-      
       if (data.success && Array.isArray(data.jobs)) {
+        cache.jobs = { data: data.jobs, timestamp: Date.now() };
         return data.jobs;
-      } else {
-        console.error('Invalid response format:', data);
-        return [];
       }
+      return [];
     } catch (error) {
       console.error('Error fetching jobs:', error);
-      // Return fallback data if API fails
-      return [
-        {
-          id: '3801',
-          title: 'Business Analyst',
-          location: 'Delhi',
-          type: 'Onsite',
-          experience: '1-2, 2,4-3,4',
-          salary: 'Mba',
-          education: 'Mba',
-          vacancy: '2',
-          gender: 'All',
-          description: 'We are looking for a talented person who can. Good in analytics.',
-          company: 'BnC Global'
-        }
-      ];
+      return [];
     }
   },
 
   async fetchJobById(jobId) {
+    // Return from cache if we have it
+    if (cache.jobs.data && Date.now() - cache.jobs.timestamp < CACHE_DURATION) {
+      const job = cache.jobs.data.find(j => j.id.toString() === jobId.toString());
+      if (job) return job;
+    }
     try {
-      console.log('Fetching job:', jobId);
       const response = await fetch(`${SCRIPT_URL}?action=getJob&jobId=${jobId}`);
       const data = await response.json();
-      console.log('Job response:', data);
-      
-      if (data.success && data.job) {
-        return data.job;
-      } else {
-        console.error('Job not found in API, creating fallback');
-        // Create fallback job based on ID
-        return {
-          id: jobId,
-          title: jobId === '3801' ? 'Business Analyst' : jobId === '3802' ? 'Data Analyst' : 'Job Position',
-          location: jobId === '3801' ? 'Delhi' : jobId === '3802' ? 'Dubai' : 'Location TBD',
-          type: jobId === '3801' ? 'Onsite' : jobId === '3802' ? 'Hybrid' : 'TBD',
-          experience: jobId === '3801' ? '1-2, 2,4-3,4' : jobId === '3802' ? '3+' : 'TBD',
-          salary: jobId === '3801' ? 'Competitive' : jobId === '3802' ? '12' : 'TBD',
-          education: jobId === '3801' ? 'MBA' : jobId === '3802' ? 'B.Tech' : 'Graduate',
-          vacancy: jobId === '3801' ? '2' : jobId === '3802' ? '1' : '1',
-          gender: 'All',
-          description: jobId === '3801' ? 'We are looking for a talented person who can. Good in analytics.' : 
-                      jobId === '3802' ? 'We are looking for someone who want to become. Data scientist' : 
-                      'Job description will be updated soon.',
-          company: 'BnC Global',
-          responsibilities: [
-            'Analyze business processes and recommend improvements',
-            'Collaborate with stakeholders to gather requirements',
-            'Create detailed documentation and reports',
-            'Support project management activities'
-          ],
-          requirements: [
-            'Bachelor\'s degree required',
-            'Relevant experience required',
-            'Strong analytical and problem-solving skills',
-            'Excellent communication abilities'
-          ]
-        };
-      }
+      if (data.success && data.job) return data.job;
+      return null;
     } catch (error) {
       console.error('Error fetching job:', error);
       return null;
@@ -93,30 +60,20 @@ export const jobService = {
 
   async submitApplication(applicationData) {
     try {
-      console.log('Submitting application:', applicationData);
-      
-      // Use form data approach to avoid CORS issues
       const formData = new FormData();
       formData.append('action', 'submitApplication');
-      
-      // Add all application data as form fields
       Object.keys(applicationData).forEach(key => {
         if (applicationData[key] !== null && applicationData[key] !== undefined) {
           formData.append(key, applicationData[key]);
         }
       });
-      
-      const response = await fetch(SCRIPT_URL, {
-        method: 'POST',
-        body: formData
-      });
-      
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
       const data = await response.json();
-      console.log('Application response:', data);
-      
+      if (data.success) {
+        this.clearCache('candidates');
+      }
       return data;
     } catch (error) {
-      console.error('Error submitting application:', error);
       return { error: error.toString() };
     }
   },
@@ -130,7 +87,6 @@ export const jobService = {
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
       return await response.json();
     } catch (error) {
-      console.error('Error in adminLogin:', error);
       return { error: error.toString() };
     }
   },
@@ -145,9 +101,17 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success) {
+        // Optimistic update
+        if (cache.jobs.data && data.jobId) {
+          cache.jobs.data.push({ id: data.jobId.toString(), ...jobData, company: 'BnC Global' });
+        } else {
+          this.clearCache('jobs');
+        }
+      }
+      return data;
     } catch (error) {
-      console.error('Error in addJob:', error);
       return { error: error.toString() };
     }
   },
@@ -162,9 +126,13 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success && cache.jobs.data) {
+        const idx = cache.jobs.data.findIndex(j => j.id.toString() === (jobData.id || '').toString());
+        if (idx !== -1) cache.jobs.data[idx] = { ...cache.jobs.data[idx], ...jobData };
+      }
+      return data;
     } catch (error) {
-      console.error('Error in updateJob:', error);
       return { error: error.toString() };
     }
   },
@@ -175,21 +143,27 @@ export const jobService = {
       formData.append('action', 'deleteJob');
       formData.append('jobId', jobId);
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success && cache.jobs.data) {
+        cache.jobs.data = cache.jobs.data.filter(j => j.id.toString() !== jobId.toString());
+      }
+      return data;
     } catch (error) {
-      console.error('Error in deleteJob:', error);
       return { error: error.toString() };
     }
   },
 
   async fetchCandidates() {
+    if (cache.candidates.data && Date.now() - cache.candidates.timestamp < CACHE_DURATION) {
+      return cache.candidates.data;
+    }
     try {
       const response = await fetch(`${SCRIPT_URL}?action=getCandidates`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
+        method: 'GET', headers: { 'Accept': 'application/json' }
       });
       const data = await response.json();
       if (data.success && Array.isArray(data.candidates)) {
+        cache.candidates = { data: data.candidates, timestamp: Date.now() };
         return data.candidates;
       }
       return [];
@@ -209,21 +183,27 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success) {
+        this.clearCache('databaseCandidates'); // clear explicitly as adding completely new object is hard
+      }
+      return data;
     } catch (error) {
-      console.error('Error in uploadCVToDatabase:', error);
       return { error: error.toString() };
     }
   },
 
   async getDatabaseCandidates() {
+    if (cache.databaseCandidates.data && Date.now() - cache.databaseCandidates.timestamp < CACHE_DURATION) {
+      return cache.databaseCandidates.data;
+    }
     try {
       const response = await fetch(`${SCRIPT_URL}?action=getDatabaseCandidates`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
+        method: 'GET', headers: { 'Accept': 'application/json' }
       });
       const data = await response.json();
       if (data.success && Array.isArray(data.candidates)) {
+        cache.databaseCandidates = { data: data.candidates, timestamp: Date.now() };
         return data.candidates;
       }
       return [];
@@ -261,9 +241,20 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      
+      // Optimistic update
+      if (data.success && cache.databaseCandidates.data) {
+        const idStr = (updateData.applicantId || '').toString();
+        const idx = cache.databaseCandidates.data.findIndex(c => c.applicantId.toString() === idStr);
+        if (idx !== -1) {
+          cache.databaseCandidates.data[idx] = { ...cache.databaseCandidates.data[idx], ...updateData };
+        }
+        // If status changes to or from something that affects shortlists, clear shortlisted cache
+        if (updateData.status) this.clearCache('shortlisted');
+      }
+      return data;
     } catch (error) {
-      console.error('Error updating database candidate:', error);
       return { error: error.toString() };
     }
   },
@@ -271,9 +262,8 @@ export const jobService = {
   async getDatabaseCandidateById(applicantId) {
     try {
       const all = await this.getDatabaseCandidates();
-      return all.find(c => c.applicantId === applicantId.toString()) || null;
+      return all.find(c => c.applicantId.toString() === applicantId.toString()) || null;
     } catch (error) {
-      console.error('Error fetching candidate by ID:', error);
       return null;
     }
   },
@@ -290,9 +280,18 @@ export const jobService = {
       formData.append('jobCode', data.jobCode || '');
       
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const result = await response.json();
+      
+      if (result.success) {
+        // Update database cache status
+        if (cache.databaseCandidates.data) {
+          const idx = cache.databaseCandidates.data.findIndex(c => c.applicantId.toString() === (data.applicantId || '').toString());
+          if (idx !== -1) cache.databaseCandidates.data[idx].status = 'Shortlisted';
+        }
+        this.clearCache('shortlisted');
+      }
+      return result;
     } catch (error) {
-      console.error('Error shortlisting candidate:', error);
       return { error: error.toString() };
     }
   },
@@ -305,33 +304,66 @@ export const jobService = {
       formData.append('jobCode', params.jobCode || '');
       
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success) {
+        // Update shortlisted cache
+        if (cache.shortlisted.data) {
+          const appIdStr = (params.applicantId || '').toString();
+          const jobCodeStr = (params.jobCode || '').toString();
+          if (jobCodeStr) {
+            cache.shortlisted.data = cache.shortlisted.data.filter(s => 
+              !(s.applicantId.toString() === appIdStr && s.jobCode === jobCodeStr)
+            );
+          } else {
+            cache.shortlisted.data = cache.shortlisted.data.filter(s => 
+              s.applicantId.toString() !== appIdStr
+            );
+          }
+        }
+        // Update database candidates cache based on backend response
+        if (cache.databaseCandidates.data && !data.hasOtherShortlists) {
+          const idx = cache.databaseCandidates.data.findIndex(c => c.applicantId.toString() === (params.applicantId || '').toString());
+          if (idx !== -1) cache.databaseCandidates.data[idx].status = 'In Database';
+        }
+      }
+      return data;
     } catch (error) {
-      console.error('Error removing shortlist:', error);
       return { error: error.toString() };
     }
   },
 
   async getShortlistedCandidates() {
+    if (cache.shortlisted.data && Date.now() - cache.shortlisted.timestamp < CACHE_DURATION) {
+      return cache.shortlisted.data;
+    }
     try {
       const response = await fetch(`${SCRIPT_URL}?action=getShortlistedCandidates`);
       if (!response.ok) throw new Error('Network error');
       const data = await response.json();
-      return data.data || [];
+      if (data.success || data.data) {
+        cache.shortlisted = { data: data.data || [], timestamp: Date.now() };
+        return data.data || [];
+      }
+      return [];
     } catch (error) {
-      console.error('Error fetching shortlisted candidates:', error);
       return [];
     }
   },
 
   async fetchClients() {
+    if (cache.clients.data && Date.now() - cache.clients.timestamp < CACHE_DURATION) {
+      return cache.clients.data;
+    }
     try {
       const response = await fetch(`${SCRIPT_URL}?action=getClients`);
       if (!response.ok) throw new Error('Network error');
       const data = await response.json();
-      return data.clients || [];
+      if (data.clients) {
+        cache.clients = { data: data.clients, timestamp: Date.now() };
+        return data.clients;
+      }
+      return [];
     } catch (error) {
-      console.error('Error fetching clients:', error);
       return [];
     }
   },
@@ -346,9 +378,10 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success) this.clearCache('clients');
+      return data;
     } catch (error) {
-      console.error('Error adding client:', error);
       return { error: error.toString() };
     }
   },
@@ -363,20 +396,48 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success && cache.clients.data) {
+        const idx = cache.clients.data.findIndex(c => c.id === clientData.id);
+        if (idx !== -1) cache.clients.data[idx] = { ...cache.clients.data[idx], ...clientData };
+      }
+      return data;
     } catch (error) {
-      console.error('Error updating client:', error);
       return { error: error.toString() };
     }
   },
 
+  async fetchHRs() {
+    if (cache.hrs.data && Date.now() - cache.hrs.timestamp < CACHE_DURATION) {
+      return cache.hrs.data;
+    }
+    try {
+      const response = await fetch(`${SCRIPT_URL}?action=getHRs`);
+      const data = await response.json();
+      if (data.success && data.hrs) {
+        cache.hrs = { data: data.hrs, timestamp: Date.now() };
+        return data.hrs;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching HRs:', error);
+      return [];
+    }
+  },
+
   async fetchClientJobs() {
+    if (cache.clientJobs.data && Date.now() - cache.clientJobs.timestamp < CACHE_DURATION) {
+      return cache.clientJobs.data;
+    }
     try {
       const response = await fetch(`${SCRIPT_URL}?action=getClientJobs`);
       const data = await response.json();
-      return data.success ? data.clientJobs : [];
+      if (data.success) {
+        cache.clientJobs = { data: data.clientJobs || [], timestamp: Date.now() };
+        return data.clientJobs || [];
+      }
+      return [];
     } catch (error) {
-      console.error('Error fetching client jobs:', error);
       return [];
     }
   },
@@ -391,9 +452,10 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success) this.clearCache('clientJobs');
+      return data;
     } catch (error) {
-      console.error('Error adding client job:', error);
       return { error: error.toString() };
     }
   },
@@ -408,9 +470,31 @@ export const jobService = {
         }
       });
       const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-      return await response.json();
+      const data = await response.json();
+      if (data.success && cache.clientJobs.data) {
+        const idx = cache.clientJobs.data.findIndex(c => c.jobCode === jobData.jobCode);
+        if (idx !== -1) cache.clientJobs.data[idx] = { ...cache.clientJobs.data[idx], ...jobData };
+      }
+      return data;
     } catch (error) {
-      console.error('Error updating client job:', error);
+      return { error: error.toString() };
+    }
+  },
+
+  async updateLastViewedBy(applicantId, viewedBy) {
+    try {
+      const formData = new FormData();
+      formData.append('action', 'updateLastViewedBy');
+      formData.append('applicantId', applicantId);
+      formData.append('viewedBy', viewedBy);
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      const data = await response.json();
+      if (data.success && cache.databaseCandidates.data) {
+        const idx = cache.databaseCandidates.data.findIndex(c => c.applicantId.toString() === applicantId.toString());
+        if (idx !== -1) cache.databaseCandidates.data[idx].lastViewedBy = viewedBy;
+      }
+      return data;
+    } catch (error) {
       return { error: error.toString() };
     }
   }

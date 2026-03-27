@@ -125,6 +125,7 @@ const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 async function extractFieldsWithGroq(resumeText, extended = false) {
   const extraFields = extended ? `,
   "skills": "Comma-separated list of all technical skills, tools, technologies, soft skills, and domain keywords found in the resume (string or null)",
+  "certifications": "Comma-separated list of all certifications, courses, and licenses found in the resume (string or null)",
   "summary": "A concise 2-3 sentence professional summary of the candidate based on their experience, skills, and background (string or null)"` : '';
 
   const prompt = `You are a resume parser. Analyze the following resume text and extract the requested information.
@@ -328,6 +329,7 @@ export async function parseResumeForDatabase(file, onProgress) {
       currentCompany: extracted.currentCompany,
       currentPosition: extracted.currentPosition,
       skills: extracted.skills,
+      certifications: extracted.certifications,
       summary: extracted.summary,
     };
 

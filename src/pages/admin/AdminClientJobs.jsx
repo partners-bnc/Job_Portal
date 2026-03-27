@@ -1,15 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
 import { FiRefreshCw, FiBriefcase, FiEdit2, FiList, FiPlusSquare, FiSearch, FiEye } from 'react-icons/fi';
 
 export default function AdminClientJobs() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [jobs, setJobs] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [hrs, setHrs] = useState([]);
   
   // 'view' | 'form'
   const [activeTab, setActiveTab] = useState('view');
@@ -30,7 +32,9 @@ export default function AdminClientJobs() {
     experience: '',
     jobDescription: '',
     recruitmentManager: '',
-    status: 'Active'
+    status: 'Active',
+    priority: 'Medium',
+    assignedTo: []
   };
   const [formData, setFormData] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,12 +43,14 @@ export default function AdminClientJobs() {
     setLoading(true);
     setError('');
     try {
-      const [jobsData, clientsData] = await Promise.all([
+      const [jobsData, clientsData, hrsData] = await Promise.all([
         jobService.fetchClientJobs(),
-        jobService.fetchClients()
+        jobService.fetchClients(),
+        jobService.fetchHRs()
       ]);
       setJobs(jobsData || []);
       setClients(clientsData || []);
+      setHrs(hrsData || []);
     } catch (err) {
       setError('Failed to load data.');
     } finally {
@@ -55,6 +61,18 @@ export default function AdminClientJobs() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Handle auto-edit job from route state
+  useEffect(() => {
+    if (jobs.length > 0 && location.state?.editJobCode) {
+      const jobToEdit = jobs.find(j => j.jobCode === location.state.editJobCode);
+      if (jobToEdit) {
+        handleEditClick(jobToEdit);
+        // clear it from state so it doesn't reopen if they refresh
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [jobs, location.state, navigate, location.pathname]);
 
   // Filter jobs based on search term
   const filteredJobs = useMemo(() => {
@@ -71,6 +89,10 @@ export default function AdminClientJobs() {
 
   const handleEditClick = (job) => {
     setEditingJob(job);
+    // Parse assignedTo from comma-separated string to array
+    const assignedArr = job.assignedTo
+      ? job.assignedTo.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
     setFormData({
       jobCode: job.jobCode || '',
       jobTitle: job.jobTitle || '',
@@ -84,7 +106,9 @@ export default function AdminClientJobs() {
       experience: job.experience || '',
       jobDescription: job.jobDescription || '',
       recruitmentManager: job.recruitmentManager || '',
-      status: job.status || 'Active'
+      status: job.status || 'Active',
+      priority: job.priority || 'Medium',
+      assignedTo: assignedArr
     });
     setActiveTab('form');
   };
@@ -117,6 +141,18 @@ export default function AdminClientJobs() {
     }
   };
 
+  // Toggle an HR in the assignedTo array
+  const toggleAssignedHR = (hrName) => {
+    setFormData(prev => {
+      const current = prev.assignedTo || [];
+      if (current.includes(hrName)) {
+        return { ...prev, assignedTo: current.filter(h => h !== hrName) };
+      } else {
+        return { ...prev, assignedTo: [...current, hrName] };
+      }
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.jobCode || formData.jobCode === 'JPC-') {
@@ -134,8 +170,10 @@ export default function AdminClientJobs() {
     try {
       const payload = {
         ...formData,
-        createdBy: sessionStorage.getItem('bnc_admin_id') || 'Admin',
-        modifiedBy: sessionStorage.getItem('bnc_admin_id') || 'Admin'
+        // Join array to comma-separated string for storage
+        assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.join(', ') : formData.assignedTo,
+        createdBy: sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin',
+        modifiedBy: sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin'
       };
       
       let res;
@@ -287,7 +325,15 @@ export default function AdminClientJobs() {
       {/* View Jobs Tab */}
       {activeTab === 'view' && (
         <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.04)' }}>
-          <div style={{ overflowX: 'auto' }}>
+          <style>{`
+            .custom-scrollbar::-webkit-scrollbar { height: 6px; }
+            .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            .clickable-row { cursor: pointer; transition: background 0.15s; }
+            .clickable-row:hover { background: #f9fafb; }
+          `}</style>
+          <div className="custom-scrollbar" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1400px' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -320,24 +366,16 @@ export default function AdminClientJobs() {
                     </td>
                   </tr>
                 ) : filteredJobs.map((j, i) => (
-                  <tr key={j.jobCode || i} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <tr key={j.jobCode || i} className="clickable-row" style={{ borderBottom: '1px solid #f1f5f9' }}
+                      onClick={() => navigate(`/admin/client-jobs/${j.jobCode}`)}>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <button onClick={() => navigate(`/admin/client-jobs/${j.jobCode}`)} style={{
-                          background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '6px 12px', 
-                          borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                          fontSize: '12px', fontWeight: 700, transition: 'all 0.2s'
-                        }} title="View Info">
-                          <FiEye size={13} /> View
-                        </button>
-                        <button onClick={() => handleEditClick(j)} style={{
-                          background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '6px 12px', 
-                          borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                          fontSize: '12px', fontWeight: 700, transition: 'all 0.2s'
-                        }} title="Quick Edit">
-                          <FiEdit2 size={13} />
+                        <button onClick={(e) => { e.stopPropagation(); handleEditClick(j); }} style={{
+                          background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '4px 10px', 
+                          borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                          fontSize: '11px', fontWeight: 600, transition: 'all 0.2s'
+                        }} title="Edit Job">
+                          <FiEdit2 size={12} /> Edit
                         </button>
                       </div>
                     </td>
@@ -457,13 +495,12 @@ export default function AdminClientJobs() {
             {/* Row 5 Management */}
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Recruitment Manager</label>
-              <input list="rmOptions" name="recruitmentManager" value={formData.recruitmentManager} onChange={handleChange} placeholder="Select Manager..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-              <datalist id="rmOptions">
-                <option value="Karan" />
-                <option value="Neha Srivastava" />
-                <option value="Preetima Gupata" />
-                <option value="Afzal khan" />
-              </datalist>
+              <select name="recruitmentManager" value={formData.recruitmentManager} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                <option value="">-- Select Manager --</option>
+                {hrs.map((hr, idx) => (
+                  <option key={idx} value={hr.hrName}>{hr.hrName}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Status</label>
@@ -474,7 +511,60 @@ export default function AdminClientJobs() {
               </select>
             </div>
 
-            {/* Row 6 Textarea */}
+            {/* Row 6 Assignment & Priority */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Assigned To (HR) — Select Multiple</label>
+              {/* Selected pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: formData.assignedTo?.length ? '10px' : '0' }}>
+                {(formData.assignedTo || []).map((hr, idx) => (
+                  <span key={idx} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0',
+                    padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 700
+                  }}>
+                    {hr}
+                    <span
+                      onClick={() => toggleAssignedHR(hr)}
+                      style={{ cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#dc2626', lineHeight: 1 }}
+                    >×</span>
+                  </span>
+                ))}
+              </div>
+              {/* Dropdown to add HR */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', boxSizing: 'border-box' }}>
+                {hrs.length === 0 ? (
+                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>No HRs available. Redeploy Apps Script.</span>
+                ) : hrs.map((hr, idx) => {
+                  const isSelected = (formData.assignedTo || []).includes(hr.hrName);
+                  return (
+                    <button
+                      type="button"
+                      key={idx}
+                      onClick={() => toggleAssignedHR(hr.hrName)}
+                      style={{
+                        padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                        border: isSelected ? '1.5px solid #059669' : '1.5px solid #cbd5e1',
+                        background: isSelected ? '#ecfdf5' : '#fff',
+                        color: isSelected ? '#059669' : '#475569',
+                        cursor: 'pointer', transition: 'all 0.2s'
+                      }}
+                    >
+                      {isSelected ? '✓ ' : ''}{hr.hrName}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Priority</label>
+              <select name="priority" value={formData.priority} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+
+            {/* Row 7 Textarea */}
             <div style={{ gridColumn: 'span 2' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Description Detailed</label>
               <textarea name="jobDescription" value={formData.jobDescription} onChange={handleChange} rows={6} placeholder="We're Hiring | Role Description..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }} />

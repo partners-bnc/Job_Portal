@@ -35,7 +35,7 @@ const NAV_ITEMS = [
     label: "CV Upload",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
-        <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+        <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
       </svg>
     )
   },
@@ -44,7 +44,7 @@ const NAV_ITEMS = [
     label: "Applicants database",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
-        <path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"/>
+        <path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z" />
       </svg>
     )
   },
@@ -53,7 +53,7 @@ const NAV_ITEMS = [
     label: "Shortlisted",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
       </svg>
     )
   },
@@ -62,7 +62,7 @@ const NAV_ITEMS = [
     label: "Clients",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
-        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
       </svg>
     )
   },
@@ -71,7 +71,7 @@ const NAV_ITEMS = [
     label: "Client Jobs",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
-        <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/>
+        <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
       </svg>
     )
   }
@@ -79,7 +79,7 @@ const NAV_ITEMS = [
 
 export default function AdminLayout() {
   const navigate = useNavigate();
-  const adminId = sessionStorage.getItem("bnc_admin_id") || "Admin";
+  const adminId = sessionStorage.getItem("bnc_admin_name") || sessionStorage.getItem("bnc_admin_id") || "Admin";
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const handleLogout = () => {
@@ -96,6 +96,9 @@ export default function AdminLayout() {
     }}>
       {/* Sidebar */}
       <aside style={{
+        position: "sticky",
+        top: 0,
+        height: "100vh",
         width: sidebarOpen ? "240px" : "72px",
         background: "linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 100%)", // Light Sky Blue Gradient
         display: "flex", flexDirection: "column",
@@ -104,7 +107,6 @@ export default function AdminLayout() {
         boxShadow: "10px 0 40px rgba(11, 47, 91, 0.08)",
         borderTopRightRadius: "32px",
         borderBottomRightRadius: "32px",
-        position: "relative",
         zIndex: 10,
         overflow: "hidden"
       }}>

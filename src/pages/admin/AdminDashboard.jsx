@@ -30,7 +30,7 @@ export default function AdminDashboard() {
   const [shortlisted, setShortlisted] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
-  const adminId = sessionStorage.getItem("bnc_admin_id") || "Admin";
+  const adminId = sessionStorage.getItem("bnc_admin_name") || sessionStorage.getItem("bnc_admin_id") || "Admin";
 
   useEffect(() => {
     const load = async () => {
