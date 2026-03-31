@@ -24,6 +24,7 @@ export default function AdminLogin() {
         sessionStorage.setItem("bnc_admin_auth", "true");
         sessionStorage.setItem("bnc_admin_id", result.loginId || loginId);
         sessionStorage.setItem("bnc_admin_name", result.hrName || result.loginId || loginId);
+        sessionStorage.setItem("bnc_admin_role", result.role || "hr");
         navigate("/admin");
       } else {
         setError(result.error || "Invalid Login ID or Password. Please try again.");
@@ -83,7 +84,7 @@ export default function AdminLogin() {
           {/* Login ID */}
           <div style={{ marginBottom: "18px" }}>
             <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>
-              Login ID
+              Login ID (Email)
             </label>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)" }}>
@@ -95,7 +96,7 @@ export default function AdminLogin() {
                 type="text"
                 value={loginId}
                 onChange={e => setLoginId(e.target.value)}
-                placeholder="Enter your Login ID"
+                placeholder="Enter your email"
                 style={{
                   width: "100%", boxSizing: "border-box",
                   border: "1.5px solid #e5e7eb", borderRadius: "12px",

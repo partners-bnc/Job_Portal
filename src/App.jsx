@@ -26,6 +26,7 @@ import AdminClients from "./pages/admin/AdminClients.jsx";
 import AdminClientJobs from "./pages/admin/AdminClientJobs.jsx";
 import AdminClientJobDetail from "./pages/admin/AdminClientJobDetail.jsx";
 import AdminEmailAutomation from "./pages/admin/AdminEmailAutomation.jsx";
+import AdminManagement from "./pages/admin/AdminManagement.jsx";
 
 function HomePage() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="client-jobs" element={<AdminClientJobs />} />
         <Route path="client-jobs/:jobCode" element={<AdminClientJobDetail />} />
         <Route path="client-jobs/:jobCode/email" element={<AdminEmailAutomation />} />
+        <Route path="admin-management" element={<AdminManagement />} />
       </Route>
     </Routes>
   );

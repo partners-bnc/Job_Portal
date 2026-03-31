@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
-import { FiArrowLeft, FiMail, FiCopy, FiExternalLink, FiCheck, FiUsers, FiRefreshCw } from 'react-icons/fi';
+import { FiArrowLeft, FiMail, FiCopy, FiExternalLink, FiCheck, FiUsers, FiRefreshCw, FiSend, FiCheckCircle } from 'react-icons/fi';
 
 export default function AdminEmailAutomation() {
   const { jobCode } = useParams();
@@ -12,6 +12,7 @@ export default function AdminEmailAutomation() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [draftType, setDraftType] = useState('manager'); // 'manager' | 'client'
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
   const [managerEmail, setManagerEmail] = useState('');
   const [clientEmail, setClientEmail] = useState('');
 
@@ -327,6 +328,52 @@ export default function AdminEmailAutomation() {
     setTimeout(() => setMailOpened(false), 5000);
   };
 
+  const handleSendAutomatically = async () => {
+    if (!toEmail) return alert('No recipient email found.');
+    
+    // Validation for Client Submission
+    if (!isManager) {
+      const invalidCandidates = selected.filter(c => c.currentStage === 'Pipeline');
+      if (invalidCandidates.length > 0) {
+        return alert(`Cannot send client email. ${invalidCandidates.length} candidate(s) have not been submitted to the Manager yet. Please send the Manager draft first.`);
+      }
+    }
+
+    if (!window.confirm(`Send this report to ${toEmail} automatically?`)) return;
+
+    setSending(true);
+    try {
+      const htmlContent = generateHtmlBody();
+      const result = await jobService.sendDirectEmail(toEmail, subject, htmlContent);
+      if (result.id || result.messageId) {
+        
+        // Update stages
+        const newStage = isManager ? 'Manager Submit' : 'Client Submission';
+        await Promise.all(selected.map(c => jobService.updateShortlistStage(c.applicantId, jobCode, newStage)));
+        
+        // Update local state
+        setCandidates(prev => prev.map(c => {
+          if (selectedIds.has(c.applicantId)) {
+            // Only upgrade stage if moving forward
+            const stageOrder = { 'Pipeline': 0, 'Manager Submit': 1, 'Client Submission': 2, 'Feedback': 3 };
+            const currentOrder = stageOrder[c.currentStage] || 0;
+            const newOrder = stageOrder[newStage] || 0;
+            if (newOrder > currentOrder) return { ...c, currentStage: newStage };
+          }
+          return c;
+        }));
+
+        alert(`Email sent successfully via Brevo! Stage updated to "${newStage}".`);
+      } else {
+        alert('Failed: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Error: ' + err.toString());
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
@@ -559,14 +606,29 @@ export default function AdminEmailAutomation() {
                 onClick={handleMailto}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '10px 20px', borderRadius: '8px', border: 'none',
-                  background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700,
+                  padding: '10px 20px', borderRadius: '8px', border: '1px solid #e2e8f0',
+                  background: '#fff', color: '#1e293b', fontSize: '13px', fontWeight: 700,
                   cursor: 'pointer', transition: 'background 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
-                onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
               >
-                <FiMail size={14} /> Copy & Open Gmail
+                <FiExternalLink size={14} /> Gmail
+              </button>
+              <button
+                onClick={handleSendAutomatically}
+                disabled={sending}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '10px 24px', borderRadius: '8px', border: 'none',
+                  background: sending ? '#94a3b8' : 'linear-gradient(135deg, #0b2f5b, #1a4a8a)',
+                  color: '#fff', fontSize: '13px', fontWeight: 700,
+                  cursor: sending ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(11, 47, 91, 0.2)'
+                }}
+              >
+                {sending ? (
+                   <FiRefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : <FiSend size={14} />}
+                {sending ? 'Sending...' : 'Send Automatically'}
               </button>
             </div>
           </div>

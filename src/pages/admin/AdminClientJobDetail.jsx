@@ -223,11 +223,11 @@ export default function AdminClientJobDetail() {
             />
           </div>
           {[
-            { label: 'Pipeline', count: shortlistedForJob.length },
+            { label: 'Pipeline', count: shortlistedForJob.filter(c => c.currentStage === 'Pipeline').length },
             { label: 'All', count: shortlistedForJob.length },
-            { label: 'Manager Submit', count: 0 },
-            { label: 'Client Submission', count: 0 },
-            { label: 'Feedback', count: 0 },
+            { label: 'Manager Submit', count: shortlistedForJob.filter(c => c.currentStage === 'Manager Submit').length },
+            { label: 'Client Submission', count: shortlistedForJob.filter(c => c.currentStage === 'Client Submission').length },
+            { label: 'Feedback', count: shortlistedForJob.filter(c => c.currentStage === 'Feedback').length },
           ].map((filter) => {
             const isActive = activeFilter === filter.label;
             return (
@@ -267,10 +267,9 @@ export default function AdminClientJobDetail() {
               c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
               c.contactNumber?.includes(searchTerm);
 
-            // In the future this can check actual DB state like c.pipelineStage === activeFilter
             let tabMatch = true;
-            if (activeFilter !== 'All' && activeFilter !== 'Pipeline') {
-              tabMatch = false; // Stub: no one is past pipeline yet
+            if (activeFilter !== 'All') {
+              tabMatch = c.currentStage === activeFilter;
             }
 
             return searchMatch && tabMatch;
@@ -286,14 +285,15 @@ export default function AdminClientJobDetail() {
 
           return filteredSubmissions.map((c, idx) => {
             // Determine current pipeline step (1=Pipeline done, 2=Manager Submit done, etc.)
-            const pipelineStep = 1; // Default: tagged/shortlisted = Pipeline step done
+            const STAGE_ORDER = { 'Pipeline': 1, 'Manager Submit': 2, 'Client Submission': 3, 'Feedback': 4 };
+            const pipelineStep = STAGE_ORDER[c.currentStage] || 1;
 
             // Stepper config matching the grid columns exactly
             const STEPS = [
-              { label: 'Pipeline', col: 1 },
-              { label: 'Manager Submit', col: 2 },
-              { label: 'Client Submission', col: 3 },
-              { label: 'Feedback', col: 4 }
+              { label: 'Pipeline', col: 1, date: c.date || c.createdOn },
+              { label: 'Manager Submit', col: 2, date: c.managerSubmittedAt },
+              { label: 'Client Submission', col: 3, date: c.clientSubmittedAt },
+              { label: 'Feedback', col: 4, date: c.feedbackReceivedAt }
             ];
 
             return (
@@ -414,7 +414,7 @@ export default function AdminClientJobDetail() {
 
                             {/* Date */}
                             <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', textAlign: 'center' }}>
-                              {isDone ? formatDate(c.shortlistedOn || c.createdOn) : ''}
+                              {isDone && step.date ? formatDate(step.date) : ''}
                             </div>
                           </div>
                         </div>

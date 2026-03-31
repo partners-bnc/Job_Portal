@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { jobService } from "../services/jobService.js";
 
 const NAV_ITEMS = [
   {
@@ -74,6 +75,15 @@ const NAV_ITEMS = [
         <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
       </svg>
     )
+  },
+  {
+    to: "/admin/admin-management",
+    label: "Admin Management",
+    icon: (
+      <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
+        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
+      </svg>
+    )
   }
 ];
 
@@ -82,9 +92,12 @@ export default function AdminLayout() {
   const adminId = sessionStorage.getItem("bnc_admin_name") || sessionStorage.getItem("bnc_admin_id") || "Admin";
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await jobService.adminLogout();
     sessionStorage.removeItem("bnc_admin_auth");
     sessionStorage.removeItem("bnc_admin_id");
+    sessionStorage.removeItem("bnc_admin_name");
+    sessionStorage.removeItem("bnc_admin_role");
     navigate("/admin/login");
   };
 
@@ -94,6 +107,28 @@ export default function AdminLayout() {
       fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
       background: "#f7f2ed"
     }}>
+      <style>{`
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 10px;
+          transition: background 0.2s;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+        /* For Firefox */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+      `}</style>
       {/* Sidebar */}
       <aside style={{
         position: "sticky",
@@ -194,7 +229,7 @@ export default function AdminLayout() {
               </div>
               <div>
                 <div style={{ color: "#312e81", fontSize: "13px", fontWeight: 700 }}>{adminId}</div>
-                <div style={{ color: "rgba(49, 46, 129, 0.6)", fontSize: "11px", fontWeight: 600 }}>HR / Admin</div>
+                <div style={{ color: "rgba(49, 46, 129, 0.6)", fontSize: "11px", fontWeight: 600 }}>{sessionStorage.getItem("bnc_admin_role") === "super_admin" ? "Super Admin" : "HR / Admin"}</div>
               </div>
             </div>
           )}
