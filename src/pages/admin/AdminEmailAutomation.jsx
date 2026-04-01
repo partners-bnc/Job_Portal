@@ -124,10 +124,10 @@ export default function AdminEmailAutomation() {
         body += `${i + 1}. ${c.name || 'N/A'} | ${c.contactNumber || 'N/A'} | ${c.email || 'N/A'} | ${c.currentLocation || 'N/A'} | ${c.totalExperience || 'N/A'} | ${c.recruiterComments || 'N/A'} | ${c.resumeUrl || c.resumeLink || 'N/A'}\n`;
       });
     } else {
-      body += `S.No | Name | Contact | Email | Location | Experience | Work Auth | Expected Pay | Notice Period | Recruiter Comments | Resume\n`;
-      body += `${'—'.repeat(120)}\n`;
+      body += `S.No | Name | Contact | Email | Experience | Expected Pay | Notice Period | Resume\n`;
+      body += `${'—'.repeat(100)}\n`;
       selected.forEach((c, i) => {
-        body += `${i + 1}. ${c.name || 'N/A'} | ${c.contactNumber || 'N/A'} | ${c.email || 'N/A'} | ${c.currentLocation || 'N/A'} | ${c.totalExperience || 'N/A'} | ${c.workAuthorization || 'N/A'} | ${c.expectedPay || 'N/A'} | ${c.noticePeriod || 'N/A'} | ${c.recruiterComments || 'N/A'} | ${c.resumeUrl || c.resumeLink || 'N/A'}\n`;
+        body += `${i + 1}. ${c.name || 'N/A'} | ${c.contactNumber || 'N/A'} | ${c.email || 'N/A'} | ${c.totalExperience || 'N/A'} | ${c.expectedPay || 'N/A'} | ${c.noticePeriod || 'N/A'} | ${c.resumeUrl || c.resumeLink || 'N/A'}\n`;
       });
     }
 
@@ -144,7 +144,7 @@ export default function AdminEmailAutomation() {
     const tdStyle = { padding: '8px 12px', fontSize: '12px', color: '#334155', borderBottom: '1px solid #e2e8f0' };
 
     const managerCols = ['S.No', 'Name', 'Contact', 'Email', 'Location', 'Experience', 'Recruiter Comments', 'Resume'];
-    const clientCols = ['S.No', 'Name', 'Contact', 'Email', 'Location', 'Experience', 'Work Auth', 'Expected Pay', 'Notice Period', 'Recruiter Comments', 'Resume'];
+    const clientCols = ['S.No', 'Name', 'Contact', 'Email', 'Experience', 'Expected Pay', 'Notice Period', 'Resume'];
     const cols = isManager ? managerCols : clientCols;
 
     return (
@@ -185,7 +185,7 @@ export default function AdminEmailAutomation() {
                 const resumeLink = c.resumeUrl || c.resumeLink || '';
                 const buildRow = isManager
                   ? [String(i + 1), c.name, c.contactNumber, c.email, c.currentLocation, c.totalExperience, c.recruiterComments]
-                  : [String(i + 1), c.name, c.contactNumber, c.email, c.currentLocation, c.totalExperience, c.workAuthorization, c.expectedPay, c.noticePeriod, c.recruiterComments];
+                  : [String(i + 1), c.name, c.contactNumber, c.email, c.totalExperience, c.expectedPay, c.noticePeriod];
                 return (
                   <tr key={c.applicantId} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
                     {buildRow.map((val, ci) => <td key={ci} style={tdStyle}>{val || 'N/A'}</td>)}
@@ -249,7 +249,7 @@ export default function AdminEmailAutomation() {
 
     // Candidate table
     const managerHeaders = ['S.No', 'Name', 'Contact', 'Email', 'Location', 'Experience', 'Recruiter Comments', 'Resume'];
-    const clientHeaders = ['S.No', 'Name', 'Contact', 'Email', 'Location', 'Experience', 'Work Auth', 'Expected Pay', 'Notice Period', 'Recruiter Comments', 'Resume'];
+    const clientHeaders = ['S.No', 'Name', 'Contact', 'Email', 'Experience', 'Expected Pay', 'Notice Period', 'Resume'];
     const headers = isManager ? managerHeaders : clientHeaders;
 
     html += `<table style="border-collapse:collapse;width:100%;font-size:12px;border:1px solid #cbd5e1">`;
@@ -267,7 +267,7 @@ export default function AdminEmailAutomation() {
       if (isManager) {
         cells = [i + 1, c.name, c.contactNumber, c.email, c.currentLocation, c.totalExperience, c.recruiterComments].map(v => `<td style="${tdCss}">${v || 'N/A'}</td>`).join('');
       } else {
-        cells = [i + 1, c.name, c.contactNumber, c.email, c.currentLocation, c.totalExperience, c.workAuthorization, c.expectedPay, c.noticePeriod, c.recruiterComments].map(v => `<td style="${tdCss}">${v || 'N/A'}</td>`).join('');
+        cells = [i + 1, c.name, c.contactNumber, c.email, c.totalExperience, c.expectedPay, c.noticePeriod].map(v => `<td style="${tdCss}">${v || 'N/A'}</td>`).join('');
       }
       cells += `<td style="${tdCss}">${resumeCell}</td>`;
       html += `<tr style="background:${bg}">${cells}</tr>`;

@@ -12,12 +12,26 @@ export default function AdminRoute({ children }) {
       if (session) {
         // Also verify admin_users table
         supabase.from('admin_users')
-          .select('id')
+          .select('hr_name, role, email')
           .eq('auth_id', session.user.id)
           .eq('is_active', true)
-          .single()
+          .maybeSingle()
           .then(({ data }) => {
-            setIsAuth(!!data);
+            if (data) {
+              // Ensure sessionStorage is populated (useful if user refreshed or returned to a persisted session)
+              if (!sessionStorage.getItem("bnc_admin_role")) {
+                sessionStorage.setItem("bnc_admin_role", data.role || "hr");
+              }
+              if (!sessionStorage.getItem("bnc_admin_name")) {
+                sessionStorage.setItem("bnc_admin_name", data.hr_name || data.email);
+              }
+              if (!sessionStorage.getItem("bnc_admin_id")) {
+                sessionStorage.setItem("bnc_admin_id", data.email);
+              }
+              setIsAuth(true);
+            } else {
+              setIsAuth(false);
+            }
             setLoading(false);
           });
       } else {

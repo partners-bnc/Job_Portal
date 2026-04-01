@@ -98,8 +98,8 @@ export default function WhyChooseUs() {
           margin: 0 auto 80px;
         }
         .why-stat-card {
-          background: radial-gradient(circle at top left, #e6f5e6 0%, #f7f3ed 58%, #ffffff 100%);
-          border: 2px solid #cfe3c8;
+          background: radial-gradient(circle at top left, #f5f3ff 0%, #f7f3ed 58%, #ffffff 100%);
+          border: 2px solid #e9d5ff;
           border-radius: 24px;
           padding: var(--stat-card-padding, 24px 20px);
           width: var(--stat-card-width, 240px);
@@ -145,9 +145,9 @@ export default function WhyChooseUs() {
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(circle at 18% 18%, rgba(200, 235, 206, 0.6), transparent 45%),
-            radial-gradient(circle at 80% 25%, rgba(210, 240, 214, 0.5), transparent 42%),
-            radial-gradient(circle at 30% 85%, rgba(205, 236, 210, 0.45), transparent 40%);
+            radial-gradient(circle at 18% 18%, rgba(233, 213, 255, 0.6), transparent 45%),
+            radial-gradient(circle at 80% 25%, rgba(243, 232, 255, 0.5), transparent 42%),
+            radial-gradient(circle at 30% 85%, rgba(233, 213, 255, 0.45), transparent 40%);
           opacity: 0.7;
           z-index: 0;
         }
@@ -171,7 +171,7 @@ export default function WhyChooseUs() {
         .bubble {
           position: absolute;
           bottom: -20px;
-          background: radial-gradient(circle at 30% 30%, rgba(170, 220, 180, 0.7) 0%, rgba(218, 240, 224, 0.6) 60%, transparent 75%);
+          background: radial-gradient(circle at 30% 30%, rgba(192, 132, 252, 0.7) 0%, rgba(233, 213, 255, 0.6) 60%, transparent 75%);
           border-radius: 50%;
           opacity: 0.7;
           filter: blur(0.2px);

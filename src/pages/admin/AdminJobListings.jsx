@@ -62,6 +62,8 @@ export default function AdminJobListings() {
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState("");
   const [descJob, setDescJob] = useState(null); // for description viewer
+  const userRole = sessionStorage.getItem("bnc_admin_role");
+  const isSuperAdmin = userRole === "super_admin";
 
   const loadJobs = async () => {
     setLoading(true);
@@ -78,6 +80,7 @@ export default function AdminJobListings() {
   };
 
   const openAdd = () => {
+    if (!isSuperAdmin) return alert("Only Super Admins can add new jobs.");
     setEditJob(null);
     setForm(EMPTY_JOB);
     setSavingMsg("");
@@ -85,6 +88,7 @@ export default function AdminJobListings() {
   };
 
   const openEdit = (job) => {
+    if (!isSuperAdmin) return alert("Only Super Admins can edit jobs.");
     setEditJob(job);
     setForm({
       title: job.title || "", location: job.location || "",
@@ -98,6 +102,7 @@ export default function AdminJobListings() {
   };
 
   const handleSave = async () => {
+    if (!isSuperAdmin) return alert("Only Super Admins can perform this action.");
     if (!form.title.trim() || !form.location.trim() || !form.type.trim()) {
       setSavingMsg("Job Role, Location, and Job Type are required.");
       return;
@@ -127,7 +132,8 @@ export default function AdminJobListings() {
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!isSuperAdmin) return alert("Only Super Admins can delete jobs.");
+    if (!deleteTarget) return;;
     setDeleting(true);
     try {
       const result = await jobService.deleteJob(deleteTarget.id);
@@ -179,15 +185,17 @@ export default function AdminJobListings() {
             {loading ? "Loading..." : `${filteredJobs.length} jobs · Manage your open positions`}
           </p>
         </div>
-        <button onClick={openAdd} style={{
-          padding: "11px 22px", background: "linear-gradient(135deg, #0b2f5b, #1a4a8a)",
-          color: "white", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px",
-          cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontFamily: "inherit",
-          boxShadow: "0 4px 14px rgba(11,47,91,0.3)"
-        }}>
-          <svg width="16" height="16" fill="white" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-          Add New Job
-        </button>
+        {isSuperAdmin && (
+          <button onClick={openAdd} style={{
+            padding: "11px 22px", background: "linear-gradient(135deg, #0b2f5b, #1a4a8a)",
+            color: "white", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px",
+            cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontFamily: "inherit",
+            boxShadow: "0 4px 14px rgba(11,47,91,0.3)"
+          }}>
+            <svg width="16" height="16" fill="white" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Add New Job
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -272,32 +280,39 @@ export default function AdminJobListings() {
                       <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                       JD
                     </button>
-                    {/* Edit */}
-                    <button onClick={() => openEdit(job)} style={{
-                      background: "#eff6ff", border: "none", borderRadius: "8px",
-                      padding: "7px 12px", cursor: "pointer", color: "#1d4ed8",
-                      fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px",
-                      fontFamily: "inherit", transition: "background 0.15s"
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.background="#dbeafe"}
-                      onMouseLeave={e => e.currentTarget.style.background="#eff6ff"}
-                    >
-                      <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                      Edit
-                    </button>
-                    {/* Delete */}
-                    <button onClick={() => setDeleteTarget(job)} style={{
-                      background: "#fef2f2", border: "none", borderRadius: "8px",
-                      padding: "7px 10px", cursor: "pointer", color: "#dc2626",
-                      fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px",
-                      fontFamily: "inherit", transition: "background 0.15s"
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.background="#fee2e2"}
-                      onMouseLeave={e => e.currentTarget.style.background="#fef2f2"}
-                    >
-                      <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                      Del
-                    </button>
+                    
+                    {isSuperAdmin ? (
+                      <>
+                        {/* Edit */}
+                        <button onClick={() => openEdit(job)} style={{
+                          background: "#eff6ff", border: "none", borderRadius: "8px",
+                          padding: "7px 12px", cursor: "pointer", color: "#1d4ed8",
+                          fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px",
+                          fontFamily: "inherit", transition: "background 0.15s"
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.background="#dbeafe"}
+                          onMouseLeave={e => e.currentTarget.style.background="#eff6ff"}
+                        >
+                          <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          Edit
+                        </button>
+                        {/* Delete */}
+                        <button onClick={() => setDeleteTarget(job)} style={{
+                          background: "#fef2f2", border: "none", borderRadius: "8px",
+                          padding: "7px 10px", cursor: "pointer", color: "#dc2626",
+                          fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px",
+                          fontFamily: "inherit", transition: "background 0.15s"
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.background="#fee2e2"}
+                          onMouseLeave={e => e.currentTarget.style.background="#fef2f2"}
+                        >
+                          <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                          Del
+                        </button>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: "11px", color: "#9ca3af", fontStyle: "italic", alignSelf: "center", marginLeft: "4px" }}>View Only</span>
+                    )}
                   </div>
                 </td>
               </tr>

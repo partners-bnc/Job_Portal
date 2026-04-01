@@ -42,6 +42,7 @@ export default function Header() {
         sessionStorage.setItem("bnc_admin_auth", "true");
         sessionStorage.setItem("bnc_admin_id", result.loginId || loginId);
         sessionStorage.setItem("bnc_admin_name", result.hrName || result.loginId || loginId);
+        sessionStorage.setItem("bnc_admin_role", result.role || "hr");
         setLoginOpen(false);
         navigate("/admin");
       } else {
