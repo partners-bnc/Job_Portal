@@ -178,34 +178,44 @@ export const jobService = {
   // ─────────────────────────────────────────────
   // RESUME UPLOAD (Supabase Storage)
   // ─────────────────────────────────────────────
-  async uploadResume(base64Data, fileName, candidateName) {
+  async uploadResume(base64Data, fileName, candidateName, overrideStorageName = null) {
     try {
       let cleanBase64 = base64Data;
       if (base64Data && base64Data.includes(',')) {
         cleanBase64 = base64Data.split(',')[1];
       }
-      if (!cleanBase64) return 'No resume uploaded';
+      if (!cleanBase64) throw new Error('No base64 data provided for resume upload.');
 
       const binaryStr = atob(cleanBase64);
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-      const safeName = `${candidateName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}_${fileName}`;
-      const filePath = `resumes/${safeName}`;
+      // Sanitize: keep only alphanumeric, underscores, hyphens, dots — strip everything else
+      const ext = fileName.toLowerCase().endsWith('.pdf') ? '.pdf'
+        : fileName.toLowerCase().endsWith('.docx') ? '.docx' : '.doc';
+
+      // Use the override name if provided (e.g. after we know the applicant ID)
+      const safeBase = overrideStorageName
+        ? overrideStorageName.replace(/[^a-zA-Z0-9_\-]/g, '_')
+        : `${(candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+
+      const filePath = `resumes/${safeBase}${ext}`;
 
       const { error } = await supabase.storage.from('resumes').upload(filePath, bytes.buffer, {
-        contentType: fileName.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream',
+        contentType: ext === '.pdf' ? 'application/pdf' : 'application/octet-stream',
         upsert: true,
       });
 
-      if (error) return `Resume upload failed: ${error.message}`;
+      if (error) throw new Error(`Resume storage failed: ${error.message}`);
 
       const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath);
       return urlData.publicUrl;
     } catch (error) {
-      return `Resume upload failed: ${error.toString()}`;
+      // Re-throw so callers can skip DB insert
+      throw new Error(`Resume upload failed: ${error.message}`);
     }
   },
+
 
   // ─────────────────────────────────────────────
   // JOB APPLICATION (Public — uses RPC)
@@ -323,94 +333,115 @@ export const jobService = {
   // CV UPLOAD TO DATABASE (HR Upload)
   // ─────────────────────────────────────────────
   async uploadCVToDatabase(cvData) {
-    try {
-      // Upload resume
-      let resumeUrl = 'No resume uploaded';
-      if (cvData.resumeData && cvData.resumeFileName && cvData.candidateName) {
-        resumeUrl = await this.uploadResume(cvData.resumeData, cvData.resumeFileName, cvData.candidateName);
+    const cleanEmail = (cvData.email || '').trim().toLowerCase();
+    const cleanPhone = (cvData.contactNumber || '').replace(/[^0-9]/g, '').trim();
+
+    // ── Check for duplicate first ──────────────────────────────────────
+    let existing = null;
+    if (cleanEmail || cleanPhone) {
+      let query = supabase.from('applicants').select('id, applicant_code, created_on');
+      if (cleanEmail && cleanPhone) {
+        query = query.or(`email.ilike.${cleanEmail},mobile_number.eq.${cleanPhone}`);
+      } else if (cleanEmail) {
+        query = query.ilike('email', cleanEmail);
+      } else {
+        query = query.eq('mobile_number', cleanPhone);
+      }
+      const { data } = await query.limit(1).maybeSingle();
+      existing = data;
+    }
+
+    const applicantCode = existing ? existing.applicant_code : null;
+
+    // ── EXISTING RECORD → UPDATE ───────────────────────────────────────
+    if (existing) {
+      // Upload PDF named CandidateName_ExistingID.pdf — THROW on failure
+      let resumeUrl = null;
+      if (cvData.resumeData && cvData.resumeFileName) {
+        const storageName = `${(cvData.candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_')}_${applicantCode}`;
+        resumeUrl = await this.uploadResume(cvData.resumeData, cvData.resumeFileName, cvData.candidateName, storageName);
+        // uploadResume throws on failure — so if we reach here, it succeeded
       }
 
-      const cleanEmail = (cvData.email || '').trim().toLowerCase();
-      const cleanPhone = (cvData.contactNumber || '').replace(/[^0-9]/g, '').trim();
+      const updateData = {
+        full_name: cvData.candidateName || undefined,
+        email: cleanEmail || undefined,
+        mobile_number: cleanPhone || undefined,
+        current_location: cvData.currentLocation || undefined,
+        current_company: cvData.currentCompany || undefined,
+        current_position: cvData.currentPosition || undefined,
+        total_experience: cvData.totalExperience || undefined,
+        education: cvData.education || undefined,
+        skills: cvData.skills || undefined,
+        cv_summary: cvData.summary || undefined,
+        certification: cvData.certifications || undefined,
+        source: cvData.source || undefined,
+        uploaded_by: cvData.uploadedBy || undefined,
+        updated_on: new Date().toISOString(),
+        ai_score: null, ai_analysis: null,
+        shortlist_decision: null, shortlist_reason: null,
+      };
+      if (resumeUrl) updateData.resume_link = resumeUrl;
 
-      // Check for duplicate
-      let existing = null;
-      if (cleanEmail || cleanPhone) {
-        let query = supabase.from('applicants').select('id, applicant_code, created_on');
-        if (cleanEmail && cleanPhone) {
-          query = query.or(`email.ilike.${cleanEmail},mobile_number.eq.${cleanPhone}`);
-        } else if (cleanEmail) {
-          query = query.ilike('email', cleanEmail);
-        } else {
-          query = query.eq('mobile_number', cleanPhone);
-        }
-        const { data } = await query.limit(1).maybeSingle();
-        existing = data;
-      }
+      // Remove undefined values
+      Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
 
-      if (existing) {
-        // UPDATE existing
-        const updateData = {
-          full_name: cvData.candidateName || undefined,
-          email: cleanEmail || undefined,
-          mobile_number: cleanPhone || undefined,
-          current_location: cvData.currentLocation || undefined,
-          current_company: cvData.currentCompany || undefined,
-          current_position: cvData.currentPosition || undefined,
-          total_experience: cvData.totalExperience || undefined,
-          education: cvData.education || undefined,
-          skills: cvData.skills || undefined,
-          cv_summary: cvData.summary || undefined,
-          certification: cvData.certifications || undefined,
-          source: cvData.source || undefined,
-          uploaded_by: cvData.uploadedBy || undefined,
-          updated_on: new Date().toISOString(),
-          ai_score: null, ai_analysis: null,
-          shortlist_decision: null, shortlist_reason: null,
-        };
-        if (resumeUrl !== 'No resume uploaded') updateData.resume_link = resumeUrl;
-
-        // Remove undefined values
-        Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
-
-        const { error } = await supabase.from('applicants').update(updateData).eq('id', existing.id);
-        if (error) return { error: error.message };
-
-        this.clearCache('databaseCandidates');
-        return {
-          success: true, isUpdate: true, applicantId: existing.applicant_code,
-          message: 'Duplicate found — existing record updated successfully'
-        };
-      }
-
-      // INSERT new
-      const { data: inserted, error } = await supabase.from('applicants').insert({
-        source: cvData.source || 'HR Upload',
-        full_name: cvData.candidateName || '',
-        email: cleanEmail, mobile_number: cleanPhone,
-        current_location: cvData.currentLocation || '',
-        current_company: cvData.currentCompany || '',
-        current_position: cvData.currentPosition || '',
-        total_experience: cvData.totalExperience || '',
-        education: cvData.education || '',
-        skills: cvData.skills || '',
-        cv_summary: cvData.summary || '',
-        certification: cvData.certifications || '',
-        resume_link: resumeUrl !== 'No resume uploaded' ? resumeUrl : '',
-        uploaded_by: cvData.uploadedBy || 'Admin',
-        status: 'In Database',
-      }).select('applicant_code').single();
-
+      const { error } = await supabase.from('applicants').update(updateData).eq('id', existing.id);
       if (error) return { error: error.message };
+
       this.clearCache('databaseCandidates');
       return {
-        success: true, isUpdate: false, applicantId: inserted.applicant_code,
-        message: 'CV uploaded and saved to database successfully'
+        success: true, isUpdate: true, applicantId: applicantCode,
+        message: 'Duplicate found — existing record updated successfully'
       };
-    } catch (error) {
-      return { error: error.toString() };
     }
+
+    // ── NEW RECORD → INSERT first to get the ID ────────────────────────
+    const { data: inserted, error: insertError } = await supabase.from('applicants').insert({
+      source: cvData.source || 'HR Upload',
+      full_name: cvData.candidateName || '',
+      email: cleanEmail,
+      mobile_number: cleanPhone,
+      current_location: cvData.currentLocation || '',
+      current_company: cvData.currentCompany || '',
+      current_position: cvData.currentPosition || '',
+      total_experience: cvData.totalExperience || '',
+      education: cvData.education || '',
+      skills: cvData.skills || '',
+      cv_summary: cvData.summary || '',
+      certification: cvData.certifications || '',
+      resume_link: '',           // placeholder — will be updated after upload
+      uploaded_by: cvData.uploadedBy || 'Admin',
+      status: 'In Database',
+    }).select('id, applicant_code').single();
+
+    if (insertError) return { error: insertError.message };
+
+    const newId = inserted.applicant_code;
+    const rowId = inserted.id;
+
+    // ── Upload PDF now that we have the applicant ID ───────────────────
+    if (cvData.resumeData && cvData.resumeFileName) {
+      try {
+        const storageName = `${(cvData.candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_')}_${newId}`;
+        const resumeUrl = await this.uploadResume(cvData.resumeData, cvData.resumeFileName, cvData.candidateName, storageName);
+
+        // Update the record with the real resume URL
+        await supabase.from('applicants').update({ resume_link: resumeUrl }).eq('id', rowId);
+      } catch (uploadErr) {
+        // PDF upload failed — ROLLBACK the inserted row so no half-record stays
+        await supabase.from('applicants').delete().eq('id', rowId);
+        return { error: `PDF upload failed — candidate NOT saved. Reason: ${uploadErr.message}` };
+      }
+    }
+
+    this.clearCache('databaseCandidates');
+    return {
+      success: true, isUpdate: false, applicantId: newId,
+      message: 'CV uploaded and saved to database successfully'
+    };
   },
+
 
   // ─────────────────────────────────────────────
   // DATABASE CANDIDATES (Applicants — centralised)
@@ -578,26 +609,40 @@ export const jobService = {
       const { data: app } = await supabase
         .from('applicants').select('id').eq('applicant_code', data.applicantId).single();
 
-      const { error } = await supabase.from('shortlisted_candidates').insert({
+      const jobCodeStr = (data.jobCode || '').toString().trim();
+
+      // Check for duplicate tag
+      const { data: existingTag } = await supabase
+        .from('tagged_candidates')
+        .select('id')
+        .eq('applicant_code', data.applicantId)
+        .eq('job_code', jobCodeStr)
+        .single();
+        
+      if (existingTag) {
+        return { error: 'Candidate is already tagged for this specific job opening.' };
+      }
+
+      const { error } = await supabase.from('tagged_candidates').insert({
         applicant_id: app?.id || null,
         applicant_code: data.applicantId || '',
         name: data.name || '',
         job_role: data.jobRole || '',
         company: data.company || '',
         shortlisted_by: data.shortlistedBy || 'Admin',
-        job_code: (data.jobCode || '').toString().trim(),
+        job_code: jobCodeStr,
       });
 
       if (error) return { error: error.message };
 
       // Update applicant status
       if (app?.id) {
-        await supabase.from('applicants').update({ status: 'Shortlisted' }).eq('id', app.id);
+        await supabase.from('applicants').update({ status: 'Tagged' }).eq('id', app.id);
       }
 
       if (cache.databaseCandidates.data) {
         const idx = cache.databaseCandidates.data.findIndex(c => c.applicantId === data.applicantId);
-        if (idx !== -1) cache.databaseCandidates.data[idx].status = 'Shortlisted';
+        if (idx !== -1) cache.databaseCandidates.data[idx].status = 'Tagged';
       }
       this.clearCache('shortlisted');
       return { success: true };
@@ -608,7 +653,7 @@ export const jobService = {
 
   async removeShortlist(params) {
     try {
-      let query = supabase.from('shortlisted_candidates').delete()
+      let query = supabase.from('tagged_candidates').delete()
         .eq('applicant_code', params.applicantId);
       if (params.jobCode) query = query.eq('job_code', params.jobCode);
 
@@ -616,7 +661,7 @@ export const jobService = {
       if (error) return { error: error.message };
 
       // Check if still has other shortlists
-      const { data: remaining } = await supabase.from('shortlisted_candidates')
+      const { data: remaining } = await supabase.from('tagged_candidates')
         .select('id').eq('applicant_code', params.applicantId).limit(1);
 
       const hasOtherShortlists = remaining && remaining.length > 0;
@@ -642,7 +687,7 @@ export const jobService = {
       return cache.shortlisted.data;
     }
     try {
-      const { data, error } = await supabase.from('shortlisted_candidates')
+      const { data, error } = await supabase.from('tagged_candidates')
         .select('*').order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -673,7 +718,7 @@ export const jobService = {
       if (stage === 'Client Submission') updateData.client_submitted_at = now;
       if (stage === 'Feedback') updateData.feedback_received_at = now;
 
-      const { error } = await supabase.from('shortlisted_candidates')
+      const { error } = await supabase.from('tagged_candidates')
         .update(updateData)
         .eq('applicant_code', applicantId)
         .eq('job_code', jobCode);
@@ -695,16 +740,22 @@ export const jobService = {
     }
     try {
       const { data, error } = await supabase.from('clients')
-        .select('*').order('created_on', { ascending: false });
+        .select('*, client_reporting_contact(*)').order('created_on', { ascending: false });
 
       if (error) throw error;
       const clients = (data || []).map(c => ({
         clientId: c.client_id, clientName: c.client_name || '',
-        contactNumber: c.contact_number || '', email: c.email || '',
         website: c.website || '', industry: c.industry || '',
         status: c.status || '', primaryOwner: c.managed_by || '',
         businessUnit: c.business_unit || '',
         displayOnJobPosting: c.display_on_job_posting || '',
+        reportingContacts: (c.client_reporting_contact || []).map(rc => ({
+           id: rc.id,
+           name: rc.contact_name,
+           email: rc.email,
+           contact: rc.phone,
+           department: rc.department || ''
+        })),
         createdBy: c.created_by || '', createdOn: c.created_on || '',
         modifiedOn: c.modified_on || '', modifiedBy: c.modified_by || '',
       }));
@@ -720,8 +771,7 @@ export const jobService = {
     try {
       const insertObj = {
         client_name: clientData.clientName || '',
-        contact_number: clientData.contactNumber || '',
-        email: clientData.email || '', website: clientData.website || '',
+        website: clientData.website || '',
         industry: clientData.industry || '',
         status: clientData.status || 'Active',
         managed_by: clientData.primaryOwner || '',
@@ -733,6 +783,19 @@ export const jobService = {
 
       const { data, error } = await supabase.from('clients').insert(insertObj).select('client_id').single();
       if (error) return { error: error.message };
+
+      const contactsToInsert = (clientData.reportingContacts || []).map(rc => ({
+          client_id: data.client_id,
+          contact_name: rc.name,
+          email: rc.email,
+          phone: rc.contact,
+          department: rc.department || ''
+      }));
+      if (contactsToInsert.length > 0) {
+         const { error: contactError } = await supabase.from('client_reporting_contact').insert(contactsToInsert);
+         if (contactError) return { error: 'Failed to save contacts: ' + contactError.message };
+      }
+
       this.clearCache('clients');
       return { success: true, clientId: data.client_id, message: 'Client added successfully' };
     } catch (error) {
@@ -744,8 +807,7 @@ export const jobService = {
     try {
       const { error } = await supabase.from('clients').update({
         client_name: clientData.clientName,
-        contact_number: clientData.contactNumber,
-        email: clientData.email, website: clientData.website,
+        website: clientData.website,
         industry: clientData.industry, status: clientData.status,
         managed_by: clientData.primaryOwner,
         business_unit: clientData.businessUnit,
@@ -755,8 +817,34 @@ export const jobService = {
       }).eq('client_id', clientData.clientId);
 
       if (error) return { error: error.message };
+
+      // Update contacts: drop old, insert new
+      await supabase.from('client_reporting_contact').delete().eq('client_id', clientData.clientId);
+      const contactsToInsert = (clientData.reportingContacts || []).map(rc => ({
+          client_id: clientData.clientId,
+          contact_name: rc.name,
+          email: rc.email,
+          phone: rc.contact,
+          department: rc.department || ''
+      }));
+      if (contactsToInsert.length > 0) {
+         const { error: contactError } = await supabase.from('client_reporting_contact').insert(contactsToInsert);
+         if (contactError) return { error: 'Failed to update contacts: ' + contactError.message };
+      }
+
       this.clearCache('clients');
       return { success: true, message: 'Client updated successfully' };
+    } catch (error) {
+      return { error: error.toString() };
+    }
+  },
+
+  async deleteClient(clientId) {
+    try {
+      const { error } = await supabase.from('clients').delete().eq('client_id', clientId);
+      if (error) return { error: error.message };
+      this.clearCache('clients');
+      return { success: true, message: 'Client deleted successfully' };
     } catch (error) {
       return { error: error.toString() };
     }
@@ -790,24 +878,54 @@ export const jobService = {
     if (cache.clientJobs.data && Date.now() - cache.clientJobs.timestamp < CACHE_DURATION) {
       return cache.clientJobs.data;
     }
+
+    const processJob = (j) => ({
+      jobCode: j.job_code || '', jobTitle: j.job_title || '',
+      businessUnit: j.business_unit || '', clientName: j.client_name || '',
+      clientId: j.client_id || '', location: j.location || '',
+      state: j.state || '', country: j.country || '',
+      payRate: j.pay_rate || '', experience: j.experience || '',
+      jobDescription: j.job_description || '',
+      createdBy: j.created_by || '', createdOn: j.created_on || '',
+      recruitmentManager: j.recruitment_manager || '',
+      status: j.status || '', modifiedOn: j.modified_on || '',
+      modifiedBy: j.modified_by || '', priority: j.priority || 'Medium',
+      assignedTo: j.assigned_to || '',
+      reportingClientName: j.reporting_client_name || '',
+      reportingClientEmail: j.reporting_client_email || '',
+      reportingClientContact: j.reporting_client_contact || '',
+    });
+
     try {
       const { data, error } = await supabase.from('client_jobs')
-        .select('*').order('created_on', { ascending: false });
+        .select(`
+          *,
+          reporting_contacts:client_id (
+            contact_name,
+            email,
+            phone
+          )
+        `).order('created_on', { ascending: false });
 
-      if (error) throw error;
-      const jobs = (data || []).map(j => ({
-        jobCode: j.job_code || '', jobTitle: j.job_title || '',
-        businessUnit: j.business_unit || '', clientName: j.client_name || '',
-        clientId: j.client_id || '', location: j.location || '',
-        state: j.state || '', country: j.country || '',
-        payRate: j.pay_rate || '', experience: j.experience || '',
-        jobDescription: j.job_description || '',
-        createdBy: j.created_by || '', createdOn: j.created_on || '',
-        recruitmentManager: j.recruitment_manager || '',
-        status: j.status || '', modifiedOn: j.modified_on || '',
-        modifiedBy: j.modified_by || '', priority: j.priority || 'Medium',
-        assignedTo: j.assigned_to || '',
-      }));
+      if (error) {
+        console.warn('Relational fetch failed, falling back to flat fetch:', error.message);
+        const { data: flatData, error: flatError } = await supabase.from('client_jobs').select('*').order('created_on', { ascending: false });
+        if (flatError) throw flatError;
+        const jobs = (flatData || []).map(processJob);
+        cache.clientJobs = { data: jobs, timestamp: Date.now() };
+        return jobs;
+      }
+
+      const jobs = (data || []).map(j => {
+        const base = processJob(j);
+        if (j.reporting_contacts) {
+          base.reportingClientName = j.reporting_contacts.contact_name || base.reportingClientName;
+          base.reportingClientEmail = j.reporting_contacts.email || base.reportingClientEmail;
+          base.reportingClientContact = j.reporting_contacts.phone || base.reportingClientContact;
+        }
+        return base;
+      });
+
       cache.clientJobs = { data: jobs, timestamp: Date.now() };
       return jobs;
     } catch (error) {
@@ -835,6 +953,9 @@ export const jobService = {
         status: jobData.status || 'Active',
         priority: jobData.priority || 'Medium',
         assigned_to: jobData.assignedTo || '',
+        reporting_client_name: jobData.reportingClientName || '',
+        reporting_client_email: jobData.reportingClientEmail || '',
+        reporting_client_contact: jobData.reportingClientContact || '',
       }).select('job_code').single();
 
       if (error) return { error: error.message };
@@ -857,6 +978,9 @@ export const jobService = {
         status: jobData.status, modified_on: new Date().toISOString(),
         modified_by: jobData.modifiedBy || 'Admin',
         priority: jobData.priority, assigned_to: jobData.assignedTo,
+        reporting_client_name: jobData.reportingClientName,
+        reporting_client_email: jobData.reportingClientEmail,
+        reporting_client_contact: jobData.reportingClientContact,
       }).eq('job_code', jobData.jobCode);
 
       if (error) return { error: error.message };

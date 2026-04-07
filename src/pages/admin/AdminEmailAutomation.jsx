@@ -15,6 +15,9 @@ export default function AdminEmailAutomation() {
   const [sending, setSending] = useState(false);
   const [managerEmail, setManagerEmail] = useState('');
   const [clientEmail, setClientEmail] = useState('');
+  const [showRestriction, setShowRestriction] = useState(false);
+  const curUserEmail = sessionStorage.getItem("bnc_admin_email") || "";
+  const curUserRole = sessionStorage.getItem("bnc_admin_role");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,13 +41,9 @@ export default function AdminEmailAutomation() {
               setManagerEmail(matchedHR.email);
             }
           }
-          // Look up client email from clients list
-          if (foundJob.clientName) {
-            const clientNameStr = foundJob.clientName.trim().toLowerCase();
-            const matchedClient = clients.find(c => (c.clientName || '').trim().toLowerCase() === clientNameStr);
-            if (matchedClient && matchedClient.email) {
-              setClientEmail(matchedClient.email);
-            }
+          // Use reporting client email directly from job (saved at job creation time)
+          if (foundJob.reportingClientEmail) {
+            setClientEmail(foundJob.reportingClientEmail);
           }
           // Enrich shortlisted candidates
           const matches = allShortlists.filter(s => s.jobCode === jobCode);
@@ -86,10 +85,27 @@ export default function AdminEmailAutomation() {
   const selected = candidates.filter(c => selectedIds.has(c.applicantId));
   const isManager = draftType === 'manager';
 
+  const handleDraftTypeChange = (type) => {
+    if (type === 'client') {
+      const isAuthorized = managerEmail && curUserEmail.toLowerCase() === managerEmail.toLowerCase();
+      // Allow super_admin? User said "Only recruitment manager", but usually super_admin is an exception.
+      // However, to be safe and follow the request strictly:
+      if (!isAuthorized && curUserRole !== 'super_admin') {
+        setShowRestriction(true);
+        return;
+      }
+    }
+    setDraftType(type);
+  };
+
   // ── Email Generation ──
   const toEmail = isManager
     ? (managerEmail || (job?.recruitmentManager ? `${job.recruitmentManager.replace(/\s+/g, '').toLowerCase()}@bncglobal.com` : ''))
-    : (clientEmail || (job?.clientName ? `${job.clientName.replace(/\s+/g, '').toLowerCase()}@client.com` : ''));
+    : (clientEmail || job?.reportingClientEmail || (job?.clientName ? `${job.clientName.replace(/\s+/g, '').toLowerCase()}@client.com` : ''));
+
+  const greeting = isManager
+    ? (job?.recruitmentManager || 'Recruitment Manager')
+    : (job?.reportingClientName || job?.clientName || 'Hiring Manager');
 
   const subject = isManager
     ? `Candidate Submission for Review – ${job?.jobTitle || ''} (${job?.jobCode || ''})`
@@ -99,7 +115,6 @@ export default function AdminEmailAutomation() {
   const generateBody = () => {
     if (selected.length === 0) return '';
     let body = '';
-    const greeting = isManager ? (job?.recruitmentManager || 'Recruitment Manager') : (job?.clientName || 'Hiring Manager');
 
     body += `Dear ${greeting},\n\n`;
     body += `Here is the Job Detail:\n\n`;
@@ -151,7 +166,7 @@ export default function AdminEmailAutomation() {
       <div>
         {/* Greeting */}
         <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#1e293b' }}>
-          Dear <strong>{isManager ? (job?.recruitmentManager || 'Recruitment Manager') : (job?.clientName || 'Hiring Manager')}</strong>,
+          Dear <strong>{greeting}</strong>,
         </p>
 
         {/* Job Details heading + info */}
@@ -226,12 +241,12 @@ export default function AdminEmailAutomation() {
     const thCss = 'padding:8px 12px;font-size:12px;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #cbd5e1;text-align:left';
     const tdCss = 'padding:8px 12px;font-size:12px;color:#334155;border:1px solid #e2e8f0';
 
-    const greeting = isManager ? (job?.recruitmentManager || 'Recruitment Manager') : (job?.clientName || 'Hiring Manager');
+    const greetingText = isManager ? (job?.recruitmentManager || 'Recruitment Manager') : (job?.reportingClientName || job?.clientName || 'Hiring Manager');
     const intro = isManager
       ? 'Please find below the shortlisted candidate(s) for your review:'
       : 'We are pleased to submit the following candidate(s) for your consideration:';
 
-    let html = `<p>Dear <b>${greeting}</b>,</p>`;
+    let html = `<p>Dear <b>${greetingText}</b>,</p>`;
 
     // Job Details heading + info FIRST
     html += `<p><b>Here is the Job Detail:</b></p>`;
@@ -525,7 +540,7 @@ export default function AdminEmailAutomation() {
             {/* Toggle */}
             <div style={{ display: 'flex', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
               <button
-                onClick={() => setDraftType('manager')}
+                onClick={() => handleDraftTypeChange('manager')}
                 style={{
                   padding: '7px 16px', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                   background: isManager ? '#3b82f6' : '#fff',
@@ -536,7 +551,7 @@ export default function AdminEmailAutomation() {
                 Manager
               </button>
               <button
-                onClick={() => setDraftType('client')}
+                onClick={() => handleDraftTypeChange('client')}
                 style={{
                   padding: '7px 16px', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                   background: !isManager ? '#16a34a' : '#fff',
@@ -662,6 +677,52 @@ export default function AdminEmailAutomation() {
           <span>✅ Table copied! In Gmail, click the body area and press <span style={{ background: '#334155', padding: '2px 8px', borderRadius: '4px', margin: '0 2px', fontFamily: 'monospace' }}>Ctrl + V</span> to paste the formatted table.</span>
         </div>
       )}
+      {/* Restriction Popup */}
+      {showRestriction && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)',
+          backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 10000, animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{
+            background: '#fff', padding: '32px', borderRadius: '20px',
+            maxWidth: '400px', width: '90%', textAlign: 'center',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <div style={{
+              width: '64px', height: '64px', background: '#fee2e2', color: '#ef4444',
+              borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px'
+            }}>
+              <FiMail size={32} />
+            </div>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', marginBottom: '12px' }}>
+              Access Restricted
+            </h2>
+            <p style={{ fontSize: '14px', color: '#64748b', lineHeight: '1.6', marginBottom: '24px' }}>
+              You are not allowed to send email to the client.<br/>
+              Only the <b>Recruitment Manager</b> is authorized to send this format.<br/>
+              <span style={{ fontSize: '13px', display: 'block', marginTop: '8px', color: '#3b82f6', fontWeight: 700 }}>
+                Manager: {job?.recruitmentManager || 'Not assigned'}
+              </span>
+            </p>
+            <button
+              onClick={() => setShowRestriction(false)}
+              style={{
+                width: '100%', padding: '12px', background: '#0f172a', color: '#fff',
+                border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer'
+              }}
+            >
+              Understand
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }

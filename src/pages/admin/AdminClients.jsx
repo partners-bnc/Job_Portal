@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { jobService } from '../../services/jobService.js';
-import { FiRefreshCw, FiExternalLink, FiBriefcase, FiEdit2, FiList, FiPlusSquare, FiSearch } from 'react-icons/fi';
+import { FiRefreshCw, FiExternalLink, FiBriefcase, FiEdit2, FiList, FiPlusSquare, FiSearch, FiTrash2, FiPlus, FiX, FiEye } from 'react-icons/fi';
 
 export default function AdminClients() {
   const [clients, setClients] = useState([]);
@@ -10,8 +10,9 @@ export default function AdminClients() {
   
   // 'view' | 'form'
   const [activeTab, setActiveTab] = useState('view');
-  // null = Add, object = Edit
+  // null = Add, object = Edit/View
   const [editingClient, setEditingClient] = useState(null);
+  const [viewMode, setViewMode] = useState(false);
 
   // Form State
   const initialForm = {
@@ -24,7 +25,8 @@ export default function AdminClients() {
     status: 'Active',
     primaryOwner: '',
     businessUnit: '',
-    displayOnJobPosting: 'No'
+    displayOnJobPosting: 'No',
+    reportingContacts: [{ name: '', email: '', contact: '', department: '' }]
   };
   const [formData, setFormData] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,23 +63,41 @@ export default function AdminClients() {
 
   const handleEditClick = (client) => {
     setEditingClient(client);
+    setViewMode(false);
     setFormData({
       clientId: client.clientId || '',
       clientName: client.clientName || '',
-      contactNumber: client.contactNumber || '',
-      email: client.email || '',
       website: client.website || '',
       industry: client.industry || '',
       status: client.status || 'Active',
       primaryOwner: client.primaryOwner || '',
       businessUnit: client.businessUnit || '',
-      displayOnJobPosting: client.displayOnJobPosting || 'No'
+      displayOnJobPosting: client.displayOnJobPosting || 'No',
+      reportingContacts: client.reportingContacts?.length ? [...client.reportingContacts] : [{ name: '', email: '', contact: '', department: '' }]
+    });
+    setActiveTab('form');
+  };
+
+  const handleViewClick = (client) => {
+    setEditingClient(client);
+    setViewMode(true);
+    setFormData({
+      clientId: client.clientId || '',
+      clientName: client.clientName || '',
+      website: client.website || '',
+      industry: client.industry || '',
+      status: client.status || 'Active',
+      primaryOwner: client.primaryOwner || '',
+      businessUnit: client.businessUnit || '',
+      displayOnJobPosting: client.displayOnJobPosting || 'No',
+      reportingContacts: client.reportingContacts?.length ? [...client.reportingContacts] : [{ name: '', email: '', contact: '', department: '' }]
     });
     setActiveTab('form');
   };
 
   const handleAddClick = () => {
     setEditingClient(null);
+    setViewMode(false);
     setFormData(initialForm);
     setActiveTab('form');
   };
@@ -85,6 +105,37 @@ export default function AdminClients() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleReportingContactChange = (index, field, value) => {
+    const newContacts = [...formData.reportingContacts];
+    newContacts[index][field] = value;
+    setFormData(prev => ({ ...prev, reportingContacts: newContacts }));
+  };
+
+  const addReportingContact = () => {
+    setFormData(prev => ({ ...prev, reportingContacts: [...prev.reportingContacts, { name: '', email: '', contact: '', department: '' }] }));
+  };
+
+  const removeReportingContact = (index) => {
+    setFormData(prev => ({ ...prev, reportingContacts: prev.reportingContacts.filter((_, i) => i !== index) }));
+  };
+
+  const handleDeleteClient = async (client) => {
+    if (!window.confirm("Are you sure you want to permanently delete this client?")) return;
+    setLoading(true);
+    try {
+       const res = await jobService.deleteClient(client.clientId);
+       if (res.success) {
+           fetchClients();
+       } else {
+           setError(res.error || "Failed to delete client");
+       }
+    } catch(err) {
+       setError("Error deleting client.");
+    } finally {
+       setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -188,7 +239,11 @@ export default function AdminClients() {
             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
           }}>
             <button 
-              onClick={() => setActiveTab('view')}
+              onClick={() => {
+                setActiveTab('view');
+                setEditingClient(null);
+                setViewMode(false);
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '10px 24px', borderRadius: '10px', border: 'none',
@@ -213,7 +268,8 @@ export default function AdminClients() {
                 boxShadow: activeTab === 'form' ? '0 4px 12px rgba(11, 47, 91, 0.2)' : 'none'
               }}
             >
-              <FiPlusSquare size={18} /> {editingClient ? 'Edit Client' : 'Add Client'}
+              {viewMode ? <FiEye size={18} /> : <FiPlusSquare size={18} />} 
+              {viewMode ? 'View Details' : (editingClient ? 'Edit Client' : 'Add Client')}
             </button>
           </div>
         </div>
@@ -262,7 +318,7 @@ export default function AdminClients() {
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>Actions</th>
                   {[
-                    'Client Id', 'Client Name', 'Contact Number', 'Email', 'Website', 'Industry', 'Status', 
+                    'Client Id', 'Client Name', 'Reporting Contacts', 'Website', 'Industry', 'Status', 
                     'Manage by', 'Business Unit', 'Display on Job', 'Created by', 
                     'Created On', 'Modified On', 'Modified By'
                   ].map(h => (
@@ -294,18 +350,31 @@ export default function AdminClients() {
                       onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <button onClick={() => handleEditClick(c)} style={{
-                        background: '#eff6ff', color: '#2563eb', border: 'none', padding: '8px 14px', 
-                        borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                        fontSize: '12px', fontWeight: 700, margin: '0 auto', transition: 'all 0.2s'
-                      }} onMouseEnter={e => e.currentTarget.style.background = '#dbeafe'} onMouseLeave={e => e.currentTarget.style.background = '#eff6ff'}>
-                        <FiEdit2 size={13} /> Edit
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                        <button title="View" onClick={() => handleViewClick(c)} style={{
+                          background: 'transparent', color: '#64748b', border: 'none', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }} onMouseEnter={e => e.currentTarget.style.color = '#334155'} onMouseLeave={e => e.currentTarget.style.color = '#64748b'}>
+                          <FiEye size={16} />
+                        </button>
+                        <button title="Edit" onClick={() => handleEditClick(c)} style={{
+                          background: 'transparent', color: '#2563eb', border: 'none', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }} onMouseEnter={e => e.currentTarget.style.opacity = '0.7'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                          <FiEdit2 size={16} />
+                        </button>
+                        <button title="Delete" onClick={() => handleDeleteClient(c)} style={{
+                          background: 'transparent', color: '#ef4444', border: 'none', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }} onMouseEnter={e => e.currentTarget.style.opacity = '0.7'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                          <FiTrash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>{c.clientId}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{c.clientName}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{c.contactNumber || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{c.email || '—'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f1f5f9', padding: '4px 10px', borderRadius: '8px' }}>
+                        <span style={{ fontWeight: 800, color: '#0B2F5B' }}>{c.reportingContacts?.length || 0}</span> Contact(s)
+                      </div>
+                    </td>
                     <td style={{ padding: '12px 16px', fontSize: '13px' }}>
                       {c.website ? (
                         <a href={c.website} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
@@ -342,10 +411,10 @@ export default function AdminClients() {
         <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '40px', maxWidth: '900px', margin: '0 auto' }}>
           <div style={{ borderBottom: '1px solid #f1f5f9', marginBottom: '32px', paddingBottom: '16px' }}>
             <h2 style={{ margin: '0', fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
-              {editingClient ? 'Update Existing Client' : 'Onboard New Client'}
+              {viewMode ? 'View Client Details' : (editingClient ? 'Update Existing Client' : 'Onboard New Client')}
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>
-              Please fill in the details below to sync with the primary database.
+              {viewMode ? 'Reviewing the details synced from the database.' : 'Please fill in the details below to sync with the primary database.'}
             </p>
           </div>
           
@@ -364,34 +433,62 @@ export default function AdminClients() {
 
             {/* General Info */}
             <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Client Name *</label>
-              <input required name="clientName" value={formData.clientName} onChange={handleChange} placeholder="Enter official company name" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Contact Number</label>
-              <input name="contactNumber" value={formData.contactNumber} onChange={handleChange} placeholder="e.g. +91 9876543210" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Email Address</label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="official@client.com" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Client Company Name *</label>
+              <input required name="clientName" value={formData.clientName} onChange={handleChange} disabled={viewMode} placeholder="Enter official company name" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
             </div>
             
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Website URL</label>
-              <input name="website" value={formData.website} onChange={handleChange} placeholder="www.yourlink.com" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <input name="website" value={formData.website} onChange={handleChange} disabled={viewMode} placeholder="www.yourlink.com" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
             </div>
             
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Industry Type</label>
-              <input name="industry" value={formData.industry} onChange={handleChange} placeholder="e.g. Fintech, Healthcare" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <input name="industry" value={formData.industry} onChange={handleChange} disabled={viewMode} placeholder="e.g. Fintech, Healthcare" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
+            </div>
+            
+            {/* Multiple Reporting Contacts Section */}
+            <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1e293b' }}>Reporting Contacts</h3>
+                {!viewMode && (
+                  <button type="button" onClick={addReportingContact} style={{ padding: '6px 12px', background: '#0B2F5B', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FiPlus size={14} /> Add Contact
+                  </button>
+                )}
+              </div>
+              
+              {formData.reportingContacts.map((contact, index) => (
+                <div key={index} style={{ display: 'grid', gridTemplateColumns: viewMode ? '1fr 1fr 1fr 1fr' : 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto', gap: '12px', paddingBottom: '16px', borderBottom: index !== formData.reportingContacts.length - 1 ? '1px solid #cbd5e1' : 'none', marginBottom: index !== formData.reportingContacts.length - 1 ? '16px' : '0', alignItems: 'end' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Department</label>
+                    <input required value={contact.department} onChange={e => handleReportingContactChange(index, 'department', e.target.value)} disabled={viewMode} placeholder="e.g. Tech, HR" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f1f5f9' : '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Contact Name</label>
+                    <input required value={contact.name} onChange={e => handleReportingContactChange(index, 'name', e.target.value)} disabled={viewMode} placeholder="e.g. John Doe" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f1f5f9' : '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Email</label>
+                    <input type="email" required value={contact.email} onChange={e => handleReportingContactChange(index, 'email', e.target.value)} disabled={viewMode} placeholder="john@company.com" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f1f5f9' : '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>Phone Number</label>
+                    <input required value={contact.contact} onChange={e => handleReportingContactChange(index, 'contact', e.target.value)} disabled={viewMode} placeholder="+91 9876543210" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f1f5f9' : '#fff' }} />
+                  </div>
+                  {!viewMode && (
+                    <button type="button" onClick={() => removeReportingContact(index)} disabled={formData.reportingContacts.length === 1} style={{ padding: '10px', background: formData.reportingContacts.length === 1 ? '#f1f5f9' : '#fef2f2', color: formData.reportingContacts.length === 1 ? '#cbd5e1' : '#ef4444', border: formData.reportingContacts.length === 1 ? '1px solid #e2e8f0' : '1px solid #fecaca', borderRadius: '10px', cursor: formData.reportingContacts.length === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center' }}>
+                      <FiX size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
             
             {/* Custom Dropdowns using datalist */}
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Manage by</label>
-              <input list="manageByOptions" name="primaryOwner" value={formData.primaryOwner} onChange={handleChange} placeholder="Search or add owner..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <input list="manageByOptions" name="primaryOwner" value={formData.primaryOwner} onChange={handleChange} disabled={viewMode} placeholder="Search or add owner..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
               <datalist id="manageByOptions">
                 <option value="Neha Srivastava" />
                 <option value="Preetima Gupata" />
@@ -402,7 +499,7 @@ export default function AdminClients() {
             
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Business Unit</label>
-              <input list="businessUnitOptions" name="businessUnit" value={formData.businessUnit} onChange={handleChange} placeholder="Select business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <input list="businessUnitOptions" name="businessUnit" value={formData.businessUnit} onChange={handleChange} disabled={viewMode} placeholder="Select business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
               <datalist id="businessUnitOptions">
                 <option value="Brocoli and Carrots Global Services" />
                 <option value="IEDGE Knowledge center Pvt Ltd" />
@@ -411,7 +508,7 @@ export default function AdminClients() {
 
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Account Status</label>
-              <select name="status" value={formData.status} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+              <select name="status" value={formData.status} onChange={handleChange} disabled={viewMode} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: viewMode ? '#f8fafc' : '#fff', outline: 'none' }}>
                 <option value="Active">Active</option>
                 <option value="Deactive">Deactive</option>
               </select>
@@ -419,17 +516,21 @@ export default function AdminClients() {
             
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Display on Job Portal</label>
-              <select name="displayOnJobPosting" value={formData.displayOnJobPosting} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+              <select name="displayOnJobPosting" value={formData.displayOnJobPosting} onChange={handleChange} disabled={viewMode} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: viewMode ? '#f8fafc' : '#fff', outline: 'none' }}>
                 <option value="Yes">Show on Portal</option>
                 <option value="No">Hide from Portal</option>
               </select>
             </div>
 
             <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', marginTop: '16px', background: '#f8fafc', padding: '24px', borderRadius: '16px' }}>
-              <button type="button" onClick={() => setActiveTab('view')} style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>Cancel</button>
-              <button type="submit" disabled={isSubmitting} style={{ flex: 1.5, padding: '14px', borderRadius: '12px', border: 'none', background: '#0B2F5B', color: '#fff', fontWeight: 800, cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(11, 47, 91, 0.2)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.9'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                {isSubmitting ? 'Syncing...' : (editingClient ? 'Update Database' : 'Submit Registration')}
+              <button type="button" onClick={() => setActiveTab('view')} style={{ flex: viewMode ? 2 : 1, padding: '14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                {viewMode ? 'Back to List' : 'Cancel'}
               </button>
+              {!viewMode && (
+                <button type="submit" disabled={isSubmitting} style={{ flex: 1.5, padding: '14px', borderRadius: '12px', border: 'none', background: '#0B2F5B', color: '#fff', fontWeight: 800, cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(11, 47, 91, 0.2)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.9'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                  {isSubmitting ? 'Syncing...' : (editingClient ? 'Update Database' : 'Submit Registration')}
+                </button>
+              )}
             </div>
           </form>
         </div>

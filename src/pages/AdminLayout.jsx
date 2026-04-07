@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   },
   {
     to: "/admin/shortlisted",
-    label: "Shortlisted",
+    label: "Tagged",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
@@ -69,7 +69,7 @@ const NAV_ITEMS = [
   },
   {
     to: "/admin/client-jobs",
-    label: "Client Jobs",
+    label: "Client JPC",
     icon: (
       <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
         <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
@@ -214,6 +214,7 @@ export default function AdminLayout() {
           borderTop: "1px solid rgba(0,0,0,0.06)",
           padding: sidebarOpen ? "16px 14px" : "16px 10px"
         }}>
+
           {sidebarOpen && (
             <div style={{
               display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px"
@@ -242,7 +243,8 @@ export default function AdminLayout() {
               cursor: "pointer", fontSize: "13px", fontWeight: 700,
               display: "flex", alignItems: "center",
               justifyContent: sidebarOpen ? "flex-start" : "center", gap: "8px",
-              transition: "all 0.2s", fontFamily: "inherit"
+              transition: "all 0.2s", fontFamily: "inherit",
+              marginBottom: "10px"
             }}
             onMouseEnter={e => {
               e.currentTarget.style.background = "#fee2e2";
@@ -260,7 +262,34 @@ export default function AdminLayout() {
             </svg>
             {sidebarOpen && "Logout"}
           </button>
+
+          <button
+            onClick={() => navigate("/")}
+            style={{
+              width: "100%", border: "1.5px solid rgba(99, 88, 220, 0.2)",
+              borderRadius: "10px", padding: sidebarOpen ? "9px 14px" : "9px 0",
+              background: "rgba(255,255,255,0.5)", color: "#312e81",
+              cursor: "pointer", fontSize: "13px", fontWeight: 700,
+              display: "flex", alignItems: "center",
+              justifyContent: sidebarOpen ? "flex-start" : "center", gap: "8px",
+              transition: "all 0.2s", fontFamily: "inherit"
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "#e0e7ff";
+              e.currentTarget.style.borderColor = "#c7d2fe";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.5)";
+              e.currentTarget.style.borderColor = "rgba(99, 88, 220, 0.2)";
+            }}
+          >
+            <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+            </svg>
+            {sidebarOpen && "Home Page"}
+          </button>
         </div>
+
       </aside>
 
       {/* Main Content */}

@@ -59,7 +59,8 @@ export default function AdminManagement() {
   };
 
   const s = {
-    page: { padding: "24px", fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif", maxWidth: "1000px", margin: "0 auto" },
+    page: { padding: "24px 40px", maxWidth: "1600px", margin: "0 auto", fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif" },
+
     header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" },
     title: { fontSize: "22px", fontWeight: 700, color: "#0b2f5b", margin: 0 },
     subtitle: { fontSize: "13px", color: "#6b7280", margin: "4px 0 0" },

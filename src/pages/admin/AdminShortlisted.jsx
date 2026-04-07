@@ -26,7 +26,7 @@ export default function AdminShortlisted() {
   };
 
   const handleDelete = async (applicantId, jobCode) => {
-    if (!window.confirm(`Are you sure you want to remove this candidate (ID: ${applicantId}) from the shortlist? This will also revert their status in the database to "In Database".`)) return;
+    if (!window.confirm(`Are you sure you want to remove this candidate (ID: ${applicantId}) from this job? This will revert their status in the database to "In Database".`)) return;
     
     setDeletingId(`${applicantId}-${jobCode}`);
     try {
@@ -74,9 +74,9 @@ export default function AdminShortlisted() {
             display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
           }}><FiCheckCircle size={20} /></div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Shortlisted Candidates</h1>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Tagged Candidates</h1>
             <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-              {loading ? 'Loading...' : `${filtered.length} total finalized shortlists`}
+              {loading ? 'Loading...' : `${filtered.length} total finalized tagged candidates`}
             </p>
           </div>
         </div>
@@ -118,19 +118,19 @@ export default function AdminShortlisted() {
         {loading ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
             <FiRefreshCw size={28} style={{ animation: 'spin 1s linear infinite', marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
-            <div style={{ fontSize: '14px' }}>Loading shortlisted candidates...</div>
+            <div style={{ fontSize: '14px' }}>Loading tagged candidates...</div>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
             <FiCheckCircle size={36} style={{ marginBottom: '12px', display: 'block', margin: '0 auto 12px', color: '#cbd5e1' }} />
-            <div style={{ fontSize: '14px', fontWeight: 600 }}>{candidates.length === 0 ? 'No candidates have been shortlisted yet.' : 'No results match your search.'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 600 }}>{candidates.length === 0 ? 'No candidates have been tagged yet.' : 'No results match your search.'}</div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  {['Candidate', 'Job Code', 'Target Role', 'Target Company', 'Shortlisted By', 'Action Date', 'Actions'].map(h => (
+                  {['Candidate', 'Job Code', 'Target Role', 'Target Company', 'Tagged By', 'Action Date', 'Actions'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Actions' ? 'right' : 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', letterSpacing: '0.4px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -140,7 +140,7 @@ export default function AdminShortlisted() {
                   <tr key={i} className="row-hover" style={{ borderBottom: i < filtered.length - 1 ? '1px solid #f1f5f9' : 'none', transition: 'background 0.2s' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ fontWeight: 700, color: '#1e293b' }}>{c.name || 'Unnamed'}</div>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>ID #{c.applicantId}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>ID: {c.applicantId}</div>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ fontWeight: 800, color: '#f59e0b', fontSize: '12px' }}>{c.jobCode || '—'}</div>

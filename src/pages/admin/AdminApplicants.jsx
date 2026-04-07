@@ -49,8 +49,9 @@ const SOURCE_COLORS = {
 const STATUS_COLORS = {
   Applied:        { bg: '#eff6ff', color: '#1e40af' },
   'In Database':  { bg: '#f0fdf4', color: '#166534' },
-  Shortlisted:    { bg: '#f0fdf4', color: '#166534' },
+  Tagged:         { bg: '#f0fdf4', color: '#166534' },
   Rejected:       { bg: '#fef2f2', color: '#dc2626' },
+
   Hired:          { bg: '#fdf4ff', color: '#7e22ce' },
   default:        { bg: '#f8fafc', color: '#475569' },
 };
@@ -590,7 +591,7 @@ export default function AdminApplicants() {
                     onClick={() => navigate(`/admin/applicants/${c.applicantId}`)}
                     style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s', background: '#fff' }}
                   >
-                    <td style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 700, fontSize: '12px', whiteSpace: 'nowrap' }}>#{c.applicantId}</td>
+                    <td style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: 700, fontSize: '12px', whiteSpace: 'nowrap' }}>{c.applicantId}</td>
                     <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                         <div style={{

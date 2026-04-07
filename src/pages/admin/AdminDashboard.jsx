@@ -29,24 +29,27 @@ export default function AdminDashboard() {
   const [dbCandidates, setDbCandidates] = useState([]);
   const [shortlisted, setShortlisted] = useState([]);
   const [clients, setClients] = useState([]);
+  const [clientJobs, setClientJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const adminId = sessionStorage.getItem("bnc_admin_name") || sessionStorage.getItem("bnc_admin_id") || "Admin";
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [j, c, db, s, clientsData] = await Promise.all([
+      const [j, c, db, s, clientsData, cj] = await Promise.all([
         jobService.fetchJobs(), 
         jobService.fetchCandidates(),
         jobService.getDatabaseCandidates(),
         jobService.getShortlistedCandidates(),
-        jobService.fetchClients()
+        jobService.fetchClients(),
+        jobService.fetchClientJobs()
       ]);
       setJobs(j || []);
       setCandidates(c || []);
       setDbCandidates(db || []);
       setShortlisted(s || []);
       setClients(clientsData || []);
+      setClientJobs((cj || []).filter(j => j.status?.toLowerCase() === 'active'));
       setLoading(false);
     };
     load();
@@ -70,7 +73,7 @@ export default function AdminDashboard() {
       stats[hr].uploaded += 1;
     });
 
-    // Process Tagged (Shortlisted)
+    // Process Tagged
     shortlisted.forEach(s => {
       if (hrDateFilter) {
         const d = new Date(s.date);
@@ -125,7 +128,7 @@ export default function AdminDashboard() {
           <StatCard icon="✨" label="AI Shortlisted" value={candidates.filter(c => c.shortlistDecision === 'Shortlisted').length} color="#7c3aed" bg="#f5f3ff" />
           
           <StatCard icon="📈" label="Total Applicant" value={dbCandidates.length} color="#2563eb" bg="#dbeafe" />
-          <StatCard icon="🏆" label="Shortlisted by HR" value={shortlisted.length} color="#16a34a" bg="#dcfce7" />
+          <StatCard icon="🏆" label="Tagged Candidates" value={shortlisted.length} color="#16a34a" bg="#dcfce7" />
           <StatCard icon="📅" label="Month CV Upload" value={dbCandidates.filter(c => {
             const d = new Date(c.createdOn);
             if (isNaN(d.getTime())) return false;
@@ -180,8 +183,8 @@ export default function AdminDashboard() {
                 <thead>
                   <tr style={{ background: "#f9fafb" }}>
                     <th style={{ padding: "12px 20px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>HR Name</th>
-                    <th style={{ padding: "12px 20px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Uploaded</th>
-                    <th style={{ padding: "12px 20px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tagged CVs</th>
+                    <th style={{ padding: "12px 20px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Uploaded</th>
+                    <th style={{ padding: "12px 20px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tagged CVs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -200,10 +203,10 @@ export default function AdminDashboard() {
                           {hrName}
                         </div>
                       </td>
-                      <td style={{ padding: "14px 20px", textAlign: "right", fontSize: "15px", fontWeight: 700, color: "#0b2f5b" }}>
+                      <td style={{ padding: "14px 20px", textAlign: "center", fontSize: "15px", fontWeight: 700, color: "#0b2f5b" }}>
                         {data.uploaded}
                       </td>
-                      <td style={{ padding: "14px 20px", textAlign: "right", fontSize: "15px", fontWeight: 700, color: "#16a34a" }}>
+                      <td style={{ padding: "14px 20px", textAlign: "center", fontSize: "15px", fontWeight: 700, color: "#16a34a" }}>
                         {data.tagged}
                       </td>
                     </tr>
@@ -257,6 +260,58 @@ export default function AdminDashboard() {
         
       </div>
 
+      {/* Active Client Jobs */}
+      {!loading && clientJobs.length > 0 && (
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#111827" }}>Active Client Jobs</h2>
+            <a href="/admin/client-jobs" style={{ fontSize: "13px", color: "#0b2f5b", fontWeight: 600, textDecoration: "none" }}>View all →</a>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
+            {clientJobs.map(job => {
+              const taggedCount = shortlisted.filter(s => s.jobCode === job.jobCode).length;
+              const hasTagged = taggedCount > 0;
+              return (
+                <a key={job.jobCode} href={`/admin/client-jobs/${job.jobCode}`} style={{ textDecoration: "none" }}>
+                  <div style={{
+                    background: "#ffffff", borderRadius: "16px", padding: "20px",
+                    border: "1px solid #e5dfd8", boxShadow: "0 4px 16px rgba(0,0,0,0.05)",
+                    transition: "box-shadow 0.2s, transform 0.2s", cursor: "pointer",
+                    display: "flex", flexDirection: "column", gap: "12px"
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.05)"; e.currentTarget.style.transform = "translateY(0)"; }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "15px", fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.jobTitle}</div>
+                        <div style={{ fontSize: "12px", color: "#0f766e", fontWeight: 700, marginTop: "4px" }}>{job.jobCode}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, marginLeft: "8px" }}>
+                        <div style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: hasTagged ? "#16a34a" : "#f97316",
+                          boxShadow: hasTagged ? "0 0 0 3px #dcfce7" : "0 0 0 3px #ffedd5"
+                        }} />
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: hasTagged ? "#16a34a" : "#f97316" }}>
+                          {taggedCount}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>
+                      <span style={{ fontWeight: 600, color: "#374151" }}>Created by: </span>{job.createdBy || "—"}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                      <span style={{ fontWeight: 600, color: "#374151" }}>Client: </span>{job.clientName || "—"}
+                    </div>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recent Applications */}
       <div style={{
         background: "#ffffff", borderRadius: "18px",
@@ -296,8 +351,8 @@ export default function AdminDashboard() {
                     <td style={{ padding: "14px 20px" }}>
                       <span style={{
                         padding: "4px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600,
-                        background: c.status === 'Applied' ? '#e0f2fe' : '#dcfce7',
-                        color: c.status === 'Applied' ? '#0369a1' : '#15803d'
+                        background: (c.status === 'Applied' || !c.status) ? '#e0f2fe' : (c.status === 'Tagged' ? '#dcfce7' : '#f1f5f9'),
+                        color: (c.status === 'Applied' || !c.status) ? '#0369a1' : (c.status === 'Tagged' ? '#15803d' : '#475569')
                       }}>{c.status || 'Applied'}</span>
                     </td>
                   </tr>

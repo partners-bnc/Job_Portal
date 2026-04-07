@@ -5,8 +5,12 @@ const STATUS_COLORS = {
   'Applied':    { bg: "#e0f2fe", color: "#0369a1" },
   'Reviewed':   { bg: "#fef9c3", color: "#92400e" },
   'Shortlisted':{ bg: "#dcfce7", color: "#15803d" },
+  'Tagged':     { bg: "#f0fdf4", color: "#15803d" },
   'Rejected':   { bg: "#fee2e2", color: "#dc2626" },
   'Hired':      { bg: "#f3e8ff", color: "#7c3aed" },
+  'In Database':{ bg: "#f1f5f9", color: "#475569" },
+  'Interview Scheduled': { bg: "#fef3c7", color: "#b45309" },
+  'On Hold':    { bg: "#e0f2fe", color: "#0369a1" },
 };
 
 function Badge({ status }) {

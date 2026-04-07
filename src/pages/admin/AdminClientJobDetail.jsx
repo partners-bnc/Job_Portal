@@ -140,28 +140,53 @@ export default function AdminClientJobDetail() {
 
         {/* Info Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', alignItems: 'center', paddingLeft: '44px' }}>
+          {/* Column 1: Client Reporting Contact (Moved Left First) */}
           <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '16px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Recruitment Manager</div>
-            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.recruitmentManager || 'N/A'}</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Client Reporting Contact</div>
+            {job.reportingClientName ? (
+              <div>
+                <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.reportingClientName}</div>
+                {job.reportingClientEmail && (
+                  <a href={`mailto:${job.reportingClientEmail}`} style={{ fontSize: '12px', color: '#2563eb', textDecoration: 'none', display: 'block', marginTop: '3px' }}>
+                    {job.reportingClientEmail}
+                  </a>
+                )}
+                {job.reportingClientContact && (
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{job.reportingClientContact}</div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '14px', color: '#94a3b8' }}>Not assigned</div>
+            )}
           </div>
-          <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Client Bill Rate / Salary</div>
-            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>N/A</div>
-          </div>
+
+          {/* Column 2: Pay Rate / Salary (Moved from Col 1) */}
           <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Pay Rate / Salary</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.payRate || 'N/A'}</div>
           </div>
+
+          {/* Column 3: Recruitment Manager */}
+          <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
+            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Recruitment Manager</div>
+            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.recruitmentManager || '—'}</div>
+          </div>
+
+          {/* Column 4: Created By & On */}
           <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Created By & On</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.createdBy}</div>
             <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>On {formatDate(job.createdOn)}</div>
           </div>
+
+          {/* Column 5: Business Unit */}
           <div style={{ paddingLeft: '16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Business Unit</div>
-            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.businessUnit || 'Broccoli and Carrots Global Services Pvt. Ltd.'}</div>
+            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.businessUnit || 'Broccoli and Carrots Global Services'}</div>
           </div>
         </div>
+
+
 
         <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '24px 0' }} />
 
@@ -223,7 +248,7 @@ export default function AdminClientJobDetail() {
             />
           </div>
           {[
-            { label: 'Pipeline', count: shortlistedForJob.filter(c => c.currentStage === 'Pipeline').length },
+            { label: 'Tagged', count: shortlistedForJob.filter(c => c.currentStage === 'Pipeline').length },
             { label: 'All', count: shortlistedForJob.length },
             { label: 'Manager Submit', count: shortlistedForJob.filter(c => c.currentStage === 'Manager Submit').length },
             { label: 'Client Submission', count: shortlistedForJob.filter(c => c.currentStage === 'Client Submission').length },
@@ -269,7 +294,8 @@ export default function AdminClientJobDetail() {
 
             let tabMatch = true;
             if (activeFilter !== 'All') {
-              tabMatch = c.currentStage === activeFilter;
+              const stageFilter = activeFilter === 'Tagged' ? 'Pipeline' : activeFilter;
+              tabMatch = c.currentStage === stageFilter;
             }
 
             return searchMatch && tabMatch;
@@ -290,7 +316,7 @@ export default function AdminClientJobDetail() {
 
             // Stepper config matching the grid columns exactly
             const STEPS = [
-              { label: 'Pipeline', col: 1, date: c.date || c.createdOn },
+              { label: 'Tagged', col: 1, date: c.date || c.createdOn },
               { label: 'Manager Submit', col: 2, date: c.managerSubmittedAt },
               { label: 'Client Submission', col: 3, date: c.clientSubmittedAt },
               { label: 'Feedback', col: 4, date: c.feedbackReceivedAt }

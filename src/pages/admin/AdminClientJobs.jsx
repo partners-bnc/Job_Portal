@@ -34,7 +34,10 @@ export default function AdminClientJobs() {
     recruitmentManager: '',
     status: 'Active',
     priority: 'Medium',
-    assignedTo: []
+    assignedTo: [],
+    reportingClientName: '',
+    reportingClientEmail: '',
+    reportingClientContact: ''
   };
   const [formData, setFormData] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,6 +54,29 @@ export default function AdminClientJobs() {
       setJobs(jobsData || []);
       setClients(clientsData || []);
       setHrs(hrsData || []);
+
+      // Auto-suggest next JPC code
+      if (jobsData && jobsData.length > 0) {
+        const jpcNumbers = jobsData
+          .map(j => {
+            const match = j.jobCode?.match(/JPC-(\d+)/);
+            return match ? parseInt(match[1]) : 0;
+          })
+          .filter(n => !isNaN(n));
+        
+        const nextNum = jpcNumbers.length > 0 ? Math.max(...jpcNumbers) + 1 : 1;
+        const suggestedCode = `JPC-${String(nextNum).padStart(3, '0')}`;
+        
+        setFormData(prev => ({
+          ...prev,
+          jobCode: suggestedCode
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          jobCode: 'JPC-001'
+        }));
+      }
     } catch (err) {
       setError('Failed to load data.');
     } finally {
@@ -108,14 +134,31 @@ export default function AdminClientJobs() {
       recruitmentManager: job.recruitmentManager || '',
       status: job.status || 'Active',
       priority: job.priority || 'Medium',
-      assignedTo: assignedArr
+      assignedTo: assignedArr,
+      reportingClientName: job.reportingClientName || '',
+      reportingClientEmail: job.reportingClientEmail || '',
+      reportingClientContact: job.reportingClientContact || ''
     });
     setActiveTab('form');
   };
 
   const handleAddClick = () => {
     setEditingJob(null);
-    setFormData(initialForm);
+    
+    // Auto-calculate next code again in case something was added
+    const jpcNumbers = jobs
+      .map(j => {
+        const match = j.jobCode?.match(/JPC-(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      })
+      .filter(n => !isNaN(n));
+    const nextNum = jpcNumbers.length > 0 ? Math.max(...jpcNumbers) + 1 : 1;
+    const suggestedCode = `JPC-${String(nextNum).padStart(3, '0')}`;
+
+    setFormData({
+      ...initialForm,
+      jobCode: suggestedCode
+    });
     setActiveTab('form');
   };
 
@@ -127,14 +170,41 @@ export default function AdminClientJobs() {
         setFormData(prev => ({
           ...prev,
           clientId: selectedClient.clientId,
-          clientName: selectedClient.clientName
+          clientName: selectedClient.clientName,
+          // Reset reporting client when client changes
+          reportingClientName: '',
+          reportingClientEmail: '',
+          reportingClientContact: ''
         }));
       } else {
         setFormData(prev => ({
           ...prev,
           clientId: '',
-          clientName: ''
+          clientName: '',
+          reportingClientName: '',
+          reportingClientEmail: '',
+          reportingClientContact: ''
         }));
+      }
+    } else if (name === 'reportingClientSelection') {
+      const selectedClient = clients.find(c => c.clientId === formData.clientId);
+      if (selectedClient && selectedClient.reportingContacts) {
+        const contact = selectedClient.reportingContacts.find(rc => rc.name === value);
+        if (contact) {
+          setFormData(prev => ({
+            ...prev,
+            reportingClientName: contact.name,
+            reportingClientEmail: contact.email,
+            reportingClientContact: contact.contact
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            reportingClientName: '',
+            reportingClientEmail: '',
+            reportingClientContact: ''
+          }));
+        }
       }
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -158,6 +228,15 @@ export default function AdminClientJobs() {
     if (!formData.jobCode || formData.jobCode === 'JPC-') {
       setError("Job Code is required and cannot be just 'JPC-'");
       return;
+    }
+
+    // Frontend Duplicate Check
+    if (!editingJob) {
+      const isDuplicate = jobs.some(j => j.jobCode?.toLowerCase() === formData.jobCode.toLowerCase());
+      if (isDuplicate) {
+        setError(`Job Code "${formData.jobCode}" already exists. Please use a unique code.`);
+        return;
+      }
     }
     if (!formData.clientId) {
       setError("Please select a Client.");
@@ -220,8 +299,8 @@ export default function AdminClientJobs() {
             <FiBriefcase size={20} />
           </div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Client Jobs</h1>
-            <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>Post and manage jobs for onboarding clients</p>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Client JPC</h1>
+            <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>Post and manage JPC database for onboarding clients</p>
           </div>
         </div>
         
@@ -356,7 +435,7 @@ export default function AdminClientJobs() {
                   <tr>
                     <td colSpan={10} style={{ padding: '80px', textAlign: 'center', color: '#94a3b8' }}>
                       <FiRefreshCw size={32} style={{ animation: 'spin 1s linear infinite', marginBottom: '16px', display: 'block', margin: '0 auto 16px' }} />
-                      <span style={{ fontSize: '15px', fontWeight: 600 }}>Syncing Client Jobs...</span>
+                      <span style={{ fontSize: '15px', fontWeight: 600 }}>Syncing Client JPC...</span>
                     </td>
                   </tr>
                 ) : filteredJobs.length === 0 ? (
@@ -410,7 +489,7 @@ export default function AdminClientJobs() {
         <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
           <div style={{ borderBottom: '1px solid #f1f5f9', marginBottom: '32px', paddingBottom: '16px' }}>
             <h2 style={{ margin: '0', fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
-              {editingJob ? `Update Job: ${formData.jobCode}` : 'Post New Client Job'}
+              {editingJob ? `Update JPC: ${formData.jobCode}` : 'Post New Client JPC'}
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>
               Fill out the required information perfectly.
@@ -450,6 +529,32 @@ export default function AdminClientJobs() {
                 ))}
               </select>
             </div>
+
+            {/* Reporting Client */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Reporting Client</label>
+              <select 
+                name="reportingClientSelection" 
+                value={formData.reportingClientName} 
+                onChange={handleChange} 
+                disabled={!formData.clientId}
+                style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: formData.clientId ? '#fff' : '#f8fafc', outline: 'none' }}
+              >
+                <option value="">-- Select Reporting Contact --</option>
+                {formData.clientId && clients.find(c => c.clientId === formData.clientId)?.reportingContacts?.map((rc, idx) => (
+                  <option key={idx} value={rc.name}>{rc.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reporting Contact Info Display */}
+            {formData.reportingClientName && (
+              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', background: '#eff6ff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                <div style={{ flex: 1, fontSize: '13px', color: '#1e3a8a' }}><strong>Email:</strong> {formData.reportingClientEmail}</div>
+                <div style={{ flex: 1, fontSize: '13px', color: '#1e3a8a' }}><strong>Phone:</strong> {formData.reportingClientContact}</div>
+              </div>
+            )}
+
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Business Unit</label>
               <input list="buOptionsJob" name="businessUnit" value={formData.businessUnit} onChange={handleChange} placeholder="Select business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
@@ -573,7 +678,7 @@ export default function AdminClientJobs() {
             <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', marginTop: '16px', background: '#f8fafc', padding: '24px', borderRadius: '16px' }}>
               <button type="button" onClick={() => setActiveTab('view')} style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>Cancel</button>
               <button type="submit" disabled={isSubmitting} style={{ flex: 1.5, padding: '14px', borderRadius: '12px', border: 'none', background: '#0f766e', color: '#fff', fontWeight: 800, cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(15, 118, 110, 0.2)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.9'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                {isSubmitting ? 'Saving Job...' : (editingJob ? 'Update Client Job' : 'Post Job')}
+                {isSubmitting ? 'Saving JPC...' : (editingJob ? 'Update Client JPC' : 'Post JPC')}
               </button>
             </div>
           </form>

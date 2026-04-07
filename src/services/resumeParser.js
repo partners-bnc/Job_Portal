@@ -113,22 +113,19 @@ async function extractText(file) {
   throw new Error('Unsupported file type');
 }
 
-// ─────────────────────────────────────────────
-// GROQ AI LLM EXTRACTION
-// ─────────────────────────────────────────────
-
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
 /**
- * Send extracted text to Groq AI to intelligently parse resume fields
+ * Common prompt for both OpenAI and Groq
  */
-async function extractFieldsWithGroq(resumeText, extended = false) {
+function getResumePrompt(resumeText, extended = false) {
   const extraFields = extended ? `,
   "skills": "Comma-separated list of all technical skills, tools, technologies, soft skills, and domain keywords found in the resume (string or null)",
   "certifications": "Comma-separated list of all certifications, courses, and licenses found in the resume (string or null)",
   "summary": "A concise 2-3 sentence professional summary of the candidate based on their experience, skills, and background (string or null)"` : '';
 
-  const prompt = `You are a resume parser. Analyze the following resume text and extract the requested information.
+  return `You are a resume parser. Analyze the following resume text and extract the requested information.
 
 RESUME TEXT:
 """
@@ -151,62 +148,89 @@ Extract the following fields from the resume. Return ONLY a valid JSON object wi
 IMPORTANT RULES:
 - Return ONLY valid JSON, no markdown, no explanation, no code blocks
 - For candidateName: This is usually the very first prominent text in the resume
-- For email: Must be a valid email format
-- For contactNumber: Include the full number as written in the resume
-- For currentLocation: Return only the city name, not full address
-- For recentEducation: Include degree (B.Tech, MBA, etc.), institution name, specialization, and year
 - For totalExperience: Must be one of the exact allowed values listed above
-- For currentCompany and currentPosition: Take from the most recent/first listed experience entry
-- If education text has broken words (like "Arti fi cial"), merge them correctly (e.g., "Artificial")
 - If you are not confident about a field, return null for that field`;
+}
 
-  try {
-    const response = await fetch('/api/groq/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a precise resume parser that extracts structured data from resume text. You only return valid JSON. Never guess or hallucinate information.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.1, // Low temperature for consistent, factual extraction
-        max_tokens: 1024,
-        response_format: { type: 'json_object' },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Groq API error:', response.status, errorBody);
-      throw new Error(`Groq API error: ${response.status}`);
+/**
+ * Generic fetch with retry logic for 429
+ */
+async function fetchWithRetry(url, options, maxRetries = 1) {
+  let attempts = 0;
+  while (attempts <= maxRetries) {
+    const response = await fetch(url, options);
+    if (response.status === 429 && attempts < maxRetries) {
+      console.warn(`Rate limited (429). Retrying in 5s... (Attempt ${attempts + 1})`);
+      await new Promise(r => setTimeout(r, 5000));
+      attempts++;
+      continue;
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('Empty response from Groq');
-    }
-
-    // Parse JSON response
-    const parsed = JSON.parse(content);
-    return parsed;
-  } catch (error) {
-    console.error('Groq extraction failed:', error);
-    throw error;
+    return response;
   }
 }
+
+/**
+ * Intelligent field extraction — Uses OpenAI if available, else falls back to Groq.
+ */
+async function extractFieldsWithAI(resumeText, extended = false) {
+  const prompt = getResumePrompt(resumeText, extended);
+  
+  // Try OpenAI first if key exists
+  if (OPENAI_API_KEY && OPENAI_API_KEY.length > 10) {
+    try {
+      const response = await fetchWithRetry('/api/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: 'You are a precise resume parser. Return only JSON.' }, { role: 'user', content: prompt }],
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return JSON.parse(data.choices[0].message.content);
+      }
+      console.warn('OpenAI failed, falling back to Groq...');
+    } catch (err) {
+      console.error('OpenAI error:', err);
+    }
+  }
+
+  // Fallback to Groq
+  if (!GROQ_API_KEY) throw new Error('No AI API keys configured.');
+
+  const response = await fetchWithRetry('/api/groq/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages: [{ role: 'system', content: 'You are a precise resume parser. Return only JSON.' }, { role: 'user', content: prompt }],
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    }),
+
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Groq API error: ${response.status} ${errorBody.substring(0, 50)}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Empty response from AI');
+  return JSON.parse(content);
+}
+
 
 // ─────────────────────────────────────────────
 // MAIN PARSE FUNCTION
@@ -238,7 +262,7 @@ export async function parseResume(file, onProgress) {
     // Step 2: Send to Groq AI for intelligent extraction
     if (onProgress) onProgress('contact');
     
-    const extracted = await extractFieldsWithGroq(text, false);
+    const extracted = await extractFieldsWithAI(text, false);
     console.log('Groq extracted fields:', extracted);
 
     if (onProgress) onProgress('education');
@@ -297,6 +321,7 @@ export async function parseResume(file, onProgress) {
 /**
  * Extended resume parser for HR CV uploads.
  * Returns all standard fields PLUS skills and summary.
+ * THROWS on AI failure or insufficient parsed data so callers can skip DB insert.
  */
 export async function parseResumeForDatabase(file, onProgress) {
   const result = {
@@ -304,57 +329,59 @@ export async function parseResumeForDatabase(file, onProgress) {
     autoFilledFields: new Set(),
   };
 
-  try {
-    if (onProgress) onProgress('extracting');
-    const text = await extractText(file);
+  if (onProgress) onProgress('extracting');
+  const text = await extractText(file);
 
-    if (!text || text.trim().length < 20) {
-      console.warn('Not enough text extracted from resume');
-      return result;
-    }
-
-    if (onProgress) onProgress('contact');
-    const extracted = await extractFieldsWithGroq(text, true); // extended = true
-    console.log('Groq (extended) extracted fields:', extracted);
-
-    if (onProgress) onProgress('education');
-
-    const fieldMap = {
-      candidateName: extracted.candidateName,
-      email: extracted.email,
-      contactNumber: extracted.contactNumber,
-      currentLocation: extracted.currentLocation,
-      education: extracted.recentEducation,
-      totalExperience: extracted.totalExperience,
-      currentCompany: extracted.currentCompany,
-      currentPosition: extracted.currentPosition,
-      skills: extracted.skills,
-      certifications: extracted.certifications,
-      summary: extracted.summary,
-    };
-
-    if (onProgress) onProgress('experience');
-
-    for (const [key, value] of Object.entries(fieldMap)) {
-      if (value !== null && value !== undefined && value !== '') {
-        if (key === 'email') {
-          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          if (!emailRegex.test(value)) continue;
-        }
-        if (key === 'totalExperience') {
-          const validValues = ['0','1','2','3','4','5','6-10','10+'];
-          if (!validValues.includes(value)) continue;
-        }
-        result.data[key] = value;
-        result.autoFilledFields.add(key);
-      }
-    }
-
-    if (onProgress) onProgress('done');
-  } catch (error) {
-    console.error('Resume parsing error (extended):', error);
-    if (onProgress) onProgress('error');
+  if (!text || text.trim().length < 20) {
+    throw new Error('Could not extract readable text from this resume. The PDF may be image-based or corrupted.');
   }
 
+  if (onProgress) onProgress('contact');
+
+  // This will throw if Groq API fails — caller handles it
+  const extracted = await extractFieldsWithAI(text, true);
+
+
+  if (onProgress) onProgress('education');
+
+  const fieldMap = {
+    candidateName: extracted.candidateName,
+    email: extracted.email,
+    contactNumber: extracted.contactNumber,
+    currentLocation: extracted.currentLocation,
+    education: extracted.recentEducation,
+    totalExperience: extracted.totalExperience,
+    currentCompany: extracted.currentCompany,
+    currentPosition: extracted.currentPosition,
+    skills: extracted.skills,
+    certifications: extracted.certifications,
+    summary: extracted.summary,
+  };
+
+  if (onProgress) onProgress('experience');
+
+  for (const [key, value] of Object.entries(fieldMap)) {
+    if (value !== null && value !== undefined && value !== '') {
+      if (key === 'email') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) continue;
+      }
+      if (key === 'totalExperience') {
+        const validValues = ['0','1','2','3','4','5','6-10','10+'];
+        if (!validValues.includes(value)) continue;
+      }
+      result.data[key] = value;
+      result.autoFilledFields.add(key);
+    }
+  }
+
+  // Minimum data gate: need at least name OR email OR phone
+  const hasMinimum = result.data.candidateName || result.data.email || result.data.contactNumber;
+  if (!hasMinimum) {
+    throw new Error('AI could not extract any identifying information (name, email, or phone) from this resume. Please check the file quality.');
+  }
+
+  if (onProgress) onProgress('done');
   return result;
 }
+

@@ -39,7 +39,7 @@ const TABS = [
   { key: 'activity', label: 'Activities', icon: <FiActivity size={14} /> },
 ];
 
-const STATUS_OPTIONS = ['Applied', 'In Database', 'Shortlisted', 'Rejected', 'Interview Scheduled', 'Hired', 'On Hold'];
+const STATUS_OPTIONS = ['Applied', 'In Database', 'Tagged', 'Rejected', 'Interview Scheduled', 'Hired', 'On Hold'];
 const SOURCE_OPTIONS = ['Job Application', 'HR Upload', 'LinkedIn', 'Naukri', 'Indeed', 'Referral', 'Walk-in', 'Company Website', 'Other'];
 const EXP_OPTIONS = ['0', '1', '2', '3', '4', '5', '6-10', '10+'];
 const NOTICE_OPTIONS = ['Immediate', '15 Days', '1 Month', '2 Months', '3 Months'];
@@ -232,10 +232,10 @@ export default function CandidateDetail() {
       shortlistedBy: hrName
     });
     if (result.success) {
-      setCandidate(prev => ({ ...prev, status: 'Shortlisted' }));
-      setForm(prev => ({ ...prev, status: 'Shortlisted' }));
+      setCandidate(prev => ({ ...prev, status: 'Tagged' }));
+      setForm(prev => ({ ...prev, status: 'Tagged' }));
       setShowShortlistModal(false);
-      setSaveMsg('Candidate Shortlisted!');
+      setSaveMsg('Candidate Tagged!');
       setTimeout(() => setSaveMsg(''), 4000);
     } else {
       setSaveMsg('Error: ' + (result.error || 'Failed to shortlist'));
@@ -332,11 +332,11 @@ export default function CandidateDetail() {
             background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#475569'
           }}>Edit Applicant</button>
           
-          <button disabled={candidate.status === 'Shortlisted'} onClick={() => setShowShortlistModal(true)} className="action-btn" style={{
-            padding: '6px 14px', border: candidate.status === 'Shortlisted' ? '1px solid #84cc16' : '1px solid #334155', borderRadius: '6px',
-            background: candidate.status === 'Shortlisted' ? '#f7fee7' : '#f8fafc', fontSize: '12px', fontWeight: 600, cursor: candidate.status === 'Shortlisted' ? 'default' : 'pointer', color: candidate.status === 'Shortlisted' ? '#4d7c0f' : '#334155',
+          <button onClick={() => setShowShortlistModal(true)} className="action-btn" style={{
+            padding: '6px 14px', border: candidate.status === 'Tagged' ? '1px solid #0B2F5B' : '1px solid #334155', borderRadius: '6px',
+            background: candidate.status === 'Tagged' ? '#eff6ff' : '#f8fafc', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: candidate.status === 'Tagged' ? '#1e40af' : '#334155',
             display: 'inline-flex', alignItems: 'center', gap: '4px'
-          }}><FiTag size={11} /> {candidate.status === 'Shortlisted' ? 'Tagged' : 'Add Tag'}</button>
+          }}><FiTag size={11} /> {candidate.status === 'Tagged' ? '+ Tag Another Job' : 'Add Tag'}</button>
 
           {candidate.resumeLink && candidate.resumeLink !== 'No resume uploaded' && (
             <a href={candidate.resumeLink} target="_blank" rel="noopener noreferrer" className="action-btn" style={{
@@ -775,7 +775,7 @@ export default function CandidateDetail() {
           }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FiCheckCircle size={20} style={{ color: '#059669' }} /> Finalize Shortlist
+                <FiCheckCircle size={20} style={{ color: '#059669' }} /> Finalize Tagging
               </h3>
               <button onClick={() => setShowShortlistModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><FiX size={20} /></button>
             </div>
@@ -799,7 +799,7 @@ export default function CandidateDetail() {
                   <option value="">Select Opening (By Code or Title)</option>
                   {clientJobs.map(j => (
                     <option key={j.jobCode} value={j.jobCode}>
-                      {j.jobCode} - {j.jobTitle}
+                      {j.jobCode} - {j.jobTitle} - {j.clientName}
                     </option>
                   ))}
                 </select>
@@ -810,7 +810,7 @@ export default function CandidateDetail() {
                   <input readOnly value={selectedJob ? selectedJob.jobCode : '—'} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', background: '#f8fafc', color: '#1e293b', outline: 'none', boxSizing: 'border-box', fontWeight: 700 }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Shortlisting Company</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Tagged for Company</label>
                   <input 
                     id="shortlist-company" 
                     readOnly
@@ -836,7 +836,7 @@ export default function CandidateDetail() {
                 width: '100%', padding: '14px', background: !selectedJob ? '#94a3b8' : 'linear-gradient(135deg, #059669, #047857)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: (saving || !selectedJob) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
               }}>
                 {saving ? <FiLoader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <FiCheckCircle size={16} />}
-                {saving ? 'Processing...' : 'Confirm Shortlist'}
+                {saving ? 'Processing...' : 'Confirm Tagging'}
               </button>
             </div>
           </div>

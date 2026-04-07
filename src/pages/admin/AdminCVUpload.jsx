@@ -4,8 +4,10 @@ import { parseResumeForDatabase } from '../../services/resumeParser.js';
 import {
   FiUpload, FiFile, FiX, FiCheck, FiZap, FiLoader, FiUser,
   FiPhone, FiMail, FiMapPin, FiBriefcase, FiBookOpen, FiTag,
-  FiAward, FiAlignLeft, FiCheckCircle, FiAlertCircle, FiChevronRight, FiDatabase
+  FiAward, FiAlignLeft, FiCheckCircle, FiAlertCircle, FiChevronRight, FiDatabase,
+  FiRefreshCw
 } from 'react-icons/fi';
+
 
 // ── Helpers ──
 const SOURCE_OPTIONS = ['LinkedIn', 'Naukri', 'Indeed', 'Referral', 'Walk-in', 'Company Website', 'Other'];
@@ -390,6 +392,12 @@ function BulkUpload({ adminName }) {
   const [results, setResults] = useState([]);
   const [started, setStarted] = useState(false);
   const [error, setError] = useState('');
+  
+  // New control states
+  const [isPaused, setIsPaused] = useState(false);
+  const [processingIndex, setProcessingIndex] = useState(0);
+  const [isCancelled, setIsCancelled] = useState(false);
+
   const fileInputRef = useRef();
 
   const STATUS = { WAITING: 'waiting', PARSING: 'parsing', SAVING: 'saving', DONE: 'done', UPDATED: 'updated', FAILED: 'failed' };
@@ -399,9 +407,14 @@ function BulkUpload({ adminName }) {
     const valid = Array.from(fileList).filter(f => allowed.includes(f.type) && f.size <= 5 * 1024 * 1024);
     if (valid.length < fileList.length) setError(`${fileList.length - valid.length} file(s) skipped (invalid type or >5MB).`);
     else setError('');
+    
     setFiles(valid);
     setResults(valid.map(f => ({ name: f.name, status: STATUS.WAITING, id: null, error: null })));
     setStarted(false);
+    setProcessing(false);
+    setIsPaused(false);
+    setProcessingIndex(0);
+    setIsCancelled(false);
   };
 
   const statusColor = { [STATUS.WAITING]: '#94a3b8', [STATUS.PARSING]: '#f59e0b', [STATUS.SAVING]: '#3b82f6', [STATUS.DONE]: '#059669', [STATUS.UPDATED]: '#d97706', [STATUS.FAILED]: '#dc3545' };
@@ -415,15 +428,26 @@ function BulkUpload({ adminName }) {
     setError('');
     setStarted(true);
     setProcessing(true);
+    setIsPaused(false);
+    setIsCancelled(false);
 
-    for (let i = 0; i < files.length; i++) {
+    for (let i = processingIndex; i < files.length; i++) {
+      if (!window._isBulkProcessing) break;
+
       const file = files[i];
+      setProcessingIndex(i);
+
       try {
-        // Parse
+        // Throttling: Increased delay to 3.5s (3500ms) for Groq safety
+        if (i > processingIndex) {
+          await new Promise(resolve => setTimeout(resolve, 3500));
+        }
+        
+        if (!window._isBulkProcessing) break;
+
         updateResult(i, { status: STATUS.PARSING });
         const result = await parseResumeForDatabase(file, () => {});
 
-        // Read file as base64
         updateResult(i, { status: STATUS.SAVING });
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -432,7 +456,6 @@ function BulkUpload({ adminName }) {
           reader.readAsDataURL(file);
         });
 
-        // Save
         const saveResult = await jobService.uploadCVToDatabase({
           ...result.data,
           source,
@@ -448,19 +471,87 @@ function BulkUpload({ adminName }) {
           updateResult(i, { status: STATUS.FAILED, error: saveResult.error || 'Save failed' });
         }
       } catch (e) {
-        // AI parsing failed (e.g., rate limit) — stop processing, mark remaining as failed
         updateResult(i, { status: STATUS.FAILED, error: e.message });
-        for (let j = i + 1; j < files.length; j++) {
-          updateResult(j, { status: STATUS.FAILED, error: 'Stopped — AI parsing failed on previous resume' });
-        }
-        break;
       }
+      
+      setProcessingIndex(i + 1);
     }
 
     setProcessing(false);
+    window._isBulkProcessing = false;
+  };
+
+  const handleStop = () => {
+    setIsPaused(true);
+    setProcessing(false);
+    window._isBulkProcessing = false;
+  };
+
+  const handleCancel = () => {
+    setFiles([]);
+    setResults([]);
+    setStarted(false);
+    setProcessing(false);
+    setIsPaused(false);
+    setProcessingIndex(0);
+    window._isBulkProcessing = false;
+    setError('');
+  };
+
+  const startBatch = () => {
+    window._isBulkProcessing = true;
+    handleStart();
+  };
+
+  const handleRetryFailed = async () => {
+    if (!source) return;
+    setError('');
+    setProcessing(true);
+    window._isBulkProcessing = true;
+
+    const failedItems = results.map((r, i) => r.status === STATUS.FAILED ? i : -1).filter(i => i !== -1);
+
+    for (const i of failedItems) {
+      if (!window._isBulkProcessing) break;
+      const file = files[i];
+      try {
+        await new Promise(resolve => setTimeout(resolve, 3500));
+        if (!window._isBulkProcessing) break;
+
+        updateResult(i, { status: STATUS.PARSING, error: null });
+        const result = await parseResumeForDatabase(file, () => {});
+
+        updateResult(i, { status: STATUS.SAVING });
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const saveResult = await jobService.uploadCVToDatabase({
+          ...result.data,
+          source,
+          uploadedBy: adminName,
+          resumeData: base64,
+          resumeFileName: file.name,
+        });
+
+        if (saveResult.success) {
+          updateResult(i, { status: saveResult.isUpdate ? STATUS.UPDATED : STATUS.DONE });
+        } else {
+          updateResult(i, { status: STATUS.FAILED, error: saveResult.error });
+        }
+      } catch (e) {
+        updateResult(i, { status: STATUS.FAILED, error: e.message });
+      }
+    }
+    setProcessing(false);
+    window._isBulkProcessing = false;
   };
 
   const doneCount = results.filter(r => r.status === STATUS.DONE).length;
+
   const updatedCount = results.filter(r => r.status === STATUS.UPDATED).length;
   const failedCount = results.filter(r => r.status === STATUS.FAILED).length;
 
@@ -581,27 +672,71 @@ function BulkUpload({ adminName }) {
       )}
 
       {/* Action Buttons */}
-      {files.length > 0 && !started && (
-        <button onClick={handleStart} style={{
-          padding: '12px', background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
-          color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer',
-          fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-        }}>
-          <FiZap size={14} /> Parse & Upload All {files.length} CVs
-        </button>
+      {files.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {!processing ? (
+              <button 
+                onClick={startBatch}
+                disabled={processingIndex >= files.length}
+                style={{
+                  flex: 2, padding: '12px', 
+                  background: processingIndex >= files.length ? '#94a3b8' : 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
+                  color: '#fff', border: 'none', borderRadius: '10px', cursor: processingIndex >= files.length ? 'not-allowed' : 'pointer',
+                  fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }}>
+                <FiZap size={14} /> 
+                {processingIndex === 0 ? `Start Batch Upload (${files.length})` : `Resume Upload (${files.length - processingIndex} left)`}
+              </button>
+          ) : (
+              <button 
+                onClick={handleStop}
+                style={{
+                  flex: 2, padding: '12px', 
+                  background: '#fef3c7',
+                  color: '#92400e', border: '1px solid #fde68a', borderRadius: '10px', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }}>
+                <FiX size={14} /> Stop Upload
+              </button>
+          )}
+
+          <button 
+            onClick={handleCancel}
+            style={{
+              flex: 1, padding: '12px', 
+              background: '#fee2e2',
+              color: '#991b1b', border: '1px solid #fecaca', borderRadius: '10px', cursor: 'pointer',
+              fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+            }}>
+            Cancel
+          </button>
+        </div>
       )}
 
       {started && !processing && (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: '#059669', marginBottom: '8px' }}>
-            ✓ Batch complete — {doneCount} added{updatedCount > 0 ? `, ${updatedCount} updated` : ''}{failedCount > 0 ? `, ${failedCount} failed` : ''}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: failedCount > 0 ? '#92400e' : '#059669' }}>
+            {failedCount > 0 ? `⚠ Batch partial — ${doneCount + updatedCount} saved, ${failedCount} failed` : `✓ Batch complete — ${doneCount} added${updatedCount > 0 ? `, ${updatedCount} updated` : ''}`}
           </div>
-          <button onClick={() => { setFiles([]); setResults([]); setStarted(false); }} style={{
-            padding: '10px 24px', background: '#0B2F5B', color: '#fff',
-            border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
-          }}>Upload Another Batch</button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => { setFiles([]); setResults([]); setStarted(false); }} style={{
+              padding: '10px 24px', background: '#e2e8f0', color: '#475569',
+              border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700
+            }}>Clear All</button>
+            
+            {failedCount > 0 && (
+              <button onClick={handleRetryFailed} style={{
+                padding: '10px 24px', background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)', color: '#fff',
+                border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <FiRefreshCw size={14} /> Retry {failedCount} Failed
+              </button>
+            )}
+          </div>
         </div>
       )}
+
     </div>
   );
 }
@@ -670,18 +805,6 @@ export default function AdminCVUpload() {
         </div>
       </div>
 
-      {/* Info Box */}
-      <div style={{
-        marginTop: '16px', padding: '14px 18px', background: '#eff6ff',
-        border: '1px solid #bfdbfe', borderRadius: '12px',
-        display: 'flex', alignItems: 'flex-start', gap: '10px'
-      }}>
-        <FiChevronRight size={15} style={{ color: '#3b82f6', flexShrink: 0, marginTop: '1px' }} />
-        <p style={{ margin: 0, fontSize: '12px', color: '#1e40af', lineHeight: 1.6 }}>
-          Uploaded CVs are parsed by AI and saved to the <strong>Database</strong> Google Sheet with a unique Applicant ID.
-          Resumes are stored in Google Drive. View all candidates in the <strong>Applicants</strong> page.
-        </p>
-      </div>
     </div>
   );
 }
