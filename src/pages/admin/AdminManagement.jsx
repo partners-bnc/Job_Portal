@@ -160,7 +160,7 @@ export default function AdminManagement() {
             </div>
             <div>
               <label style={s.label}>Designation</label>
-              <input style={s.input} value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Senior Recruitment" />
+              <input style={s.input} value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Senior Recruiter" />
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>

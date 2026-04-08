@@ -84,6 +84,15 @@ const NAV_ITEMS = [
         <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
       </svg>
     )
+  },
+  {
+    to: "/admin/hr-reports",
+    label: "HR Reports",
+    icon: (
+      <svg width="18" height="18" fill="#312e81" viewBox="0 0 24 24">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
+      </svg>
+    )
   }
 ];
 
@@ -159,7 +168,7 @@ export default function AdminLayout() {
 
         {/* Brand */}
         <div style={{
-          padding: sidebarOpen ? "24px 20px 20px" : "24px 12px 20px",
+          padding: sidebarOpen ? "16px 20px 12px" : "16px 12px 12px",
           borderBottom: "1px solid rgba(255,255,255,0.1)",
           display: "flex", alignItems: "center", gap: "12px"
         }}>
@@ -182,7 +191,7 @@ export default function AdminLayout() {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: "16px 10px", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <nav style={{ flex: 1, padding: "8px 10px", display: "flex", flexDirection: "column", gap: "2px", overflowY: "auto", scrollbarWidth: "none" }}>
           {NAV_ITEMS.map(item => (
             <NavLink
               key={item.to}
@@ -190,10 +199,10 @@ export default function AdminLayout() {
               end={item.end}
               style={({ isActive }) => ({
                 display: "flex", alignItems: "center",
-                gap: "12px", padding: sidebarOpen ? "11px 14px" : "11px 0",
+                gap: "10px", padding: sidebarOpen ? "9px 12px" : "10px 0",
                 justifyContent: sidebarOpen ? "flex-start" : "center",
-                borderRadius: "12px", textDecoration: "none",
-                fontWeight: 700, fontSize: "14px", transition: "all 0.2s",
+                borderRadius: "10px", textDecoration: "none",
+                fontWeight: 700, fontSize: "13px", transition: "all 0.2s",
                 color: isActive ? "#312e81" : "rgba(49, 46, 129, 0.7)",
                 background: isActive ? "rgba(255,255,255,0.6)" : "transparent",
                 boxShadow: isActive ? "0 4px 12px rgba(99, 88, 220, 0.1)" : "none"

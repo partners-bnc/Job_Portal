@@ -499,11 +499,7 @@ export default function AdminClients() {
             
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Business Unit</label>
-              <input list="businessUnitOptions" name="businessUnit" value={formData.businessUnit} onChange={handleChange} disabled={viewMode} placeholder="Select business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
-              <datalist id="businessUnitOptions">
-                <option value="Brocoli and Carrots Global Services" />
-                <option value="IEDGE Knowledge center Pvt Ltd" />
-              </datalist>
+              <input type="text" name="businessUnit" value={formData.businessUnit} onChange={handleChange} disabled={viewMode} placeholder="Enter business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', background: viewMode ? '#f8fafc' : '#fff' }} />
             </div>
 
             <div>

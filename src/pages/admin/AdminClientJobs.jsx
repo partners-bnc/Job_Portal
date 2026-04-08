@@ -557,11 +557,7 @@ export default function AdminClientJobs() {
 
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Business Unit</label>
-              <input list="buOptionsJob" name="businessUnit" value={formData.businessUnit} onChange={handleChange} placeholder="Select business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-              <datalist id="buOptionsJob">
-                <option value="Brocoli and Carrots Global Services" />
-                <option value="IEDGE Knowledge center Pvt Ltd" />
-              </datalist>
+              <input type="text" name="businessUnit" value={formData.businessUnit} onChange={handleChange} placeholder="Enter business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
             </div>
 
             {/* Row 3 Location Details */}

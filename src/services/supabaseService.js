@@ -569,6 +569,43 @@ export const jobService = {
   },
 
   // ─────────────────────────────────────────────
+  // COMMUNICATION LOGS
+  // ─────────────────────────────────────────────
+  async getCommunicationLogs(applicantCode) {
+    try {
+      const { data, error } = await supabase
+        .from('communication_logs')
+        .select('*')
+        .eq('applicant_code', applicantCode)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error fetching communication logs:', error);
+      return { success: false, error: error.toString(), data: [] };
+    }
+  },
+
+  async addCommunicationLog(logData) {
+    try {
+      const { error } = await supabase
+        .from('communication_logs')
+        .insert({
+          applicant_code: logData.applicantCode,
+          hr_name: logData.hrName,
+          communication_type: logData.communicationType || 'Call',
+          notes: logData.notes
+        });
+
+      if (error) throw error;
+      return { success: true, message: 'Log added successfully' };
+    } catch (error) {
+      return { success: false, error: error.toString() };
+    }
+  },
+
+  // ─────────────────────────────────────────────
   // AI ANALYSIS
   // ─────────────────────────────────────────────
   async saveAiResults(email, jobApplied, aiData) {

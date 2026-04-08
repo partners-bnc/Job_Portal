@@ -5,7 +5,7 @@ import {
   FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase,
   FiBookOpen, FiTag, FiAlignLeft, FiCalendar, FiExternalLink,
   FiEdit3, FiSave, FiX, FiAward, FiClock, FiCheckCircle,
-  FiLoader, FiDatabase, FiFileText, FiActivity, FiClipboard
+  FiLoader, FiDatabase, FiFileText, FiActivity, FiClipboard, FiPhoneCall, FiMessageSquare
 } from 'react-icons/fi';
 
 // ── Helpers ──
@@ -37,6 +37,7 @@ const TABS = [
   { key: 'employer', label: 'Employer Details', icon: <FiDatabase size={14} /> },
   { key: 'test', label: 'Employment Test Results', icon: <FiFileText size={14} /> },
   { key: 'activity', label: 'Activities', icon: <FiActivity size={14} /> },
+  { key: 'communication', label: 'Comm. History', icon: <FiPhoneCall size={14} /> },
 ];
 
 const STATUS_OPTIONS = ['Applied', 'In Database', 'Tagged', 'Rejected', 'Interview Scheduled', 'Hired', 'On Hold'];
@@ -109,6 +110,13 @@ export default function CandidateDetail() {
   const [clientJobs, setClientJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   
+  const [logs, setLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [newLogNotes, setNewLogNotes] = useState('');
+  const [newLogType, setNewLogType] = useState('Call');
+  const [addingLog, setAddingLog] = useState(false);
+
   const [rightTab, setRightTab] = useState('Applicant');
   const [ratings, setRatings] = useState({
     technical: 0,
@@ -139,6 +147,21 @@ export default function CandidateDetail() {
     setTempRead(true); setTempSpeak(true); setTempWrite(true);
   };
 
+  const loadLogs = async (applicantId) => {
+    setLoadingLogs(true);
+    try {
+      const res = await jobService.getCommunicationLogs(applicantId);
+      if (res.success) {
+        setLogs(res.data || []);
+      } else {
+        setLogs([]);
+      }
+    } catch(e) {
+      setLogs([]);
+    }
+    setLoadingLogs(false);
+  };
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -157,6 +180,7 @@ export default function CandidateDetail() {
         });
         const viewer = sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || sessionStorage.getItem('loginId') || 'Recruiter/Admin';
         jobService.updateLastViewedBy(id, viewer);
+        loadLogs(c.applicantId);
       } else {
         setError('Applicant not found.');
       }
@@ -345,6 +369,22 @@ export default function CandidateDetail() {
               textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px'
             }}>View Resume <FiExternalLink size={11} /></a>
           )}
+
+          <button onClick={() => setShowLogModal(true)} className="action-btn" style={{
+            padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: '6px',
+            background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#000',
+            display: 'inline-flex', alignItems: 'center', gap: '6px'
+          }}>
+            <FiPhoneCall size={11} color="#000" /> Log Comm.
+            {logs && logs.length > 0 && (
+              <span style={{
+                background: '#f1f5f9', color: '#000', fontSize: '10px', fontWeight: 800,
+                padding: '2px 6px', borderRadius: '12px'
+              }}>
+                {logs.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
       {/* Rating / AI Box */}
@@ -651,6 +691,83 @@ export default function CandidateDetail() {
     </div>
   );
 
+  const handleAddLog = async () => {
+    if (!newLogNotes.trim()) return;
+    setAddingLog(true);
+    const hrName = sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin';
+    const logData = {
+      applicantCode: candidate.applicantId,
+      hrName: hrName,
+      communicationType: newLogType,
+      notes: newLogNotes
+    };
+    const res = await jobService.addCommunicationLog(logData);
+    if (res.success) {
+      setNewLogNotes('');
+      setNewLogType('Call');
+      setShowLogModal(false);
+      loadLogs(candidate.applicantId);
+    } else {
+      alert(res.error || 'Failed to add log');
+    }
+    setAddingLog(false);
+  };
+
+  // ── Communication History Tab ──
+  const CommunicationContent = () => {
+    return (
+      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>Communication History</h3>
+          <button onClick={() => setShowLogModal(true)} style={{
+            padding: '8px 16px', background: '#0B2F5B', color: '#fff', border: 'none', borderRadius: '8px', 
+            fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+          }}>
+            <FiPhoneCall size={12} /> Log New Comm.
+          </button>
+        </div>
+
+        {/* Timeline */}
+        {loadingLogs ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '20px', color: '#94a3b8' }}><FiLoader size={20} style={{ animation: 'spin 1s linear infinite' }} /></div>
+        ) : (logs || []).length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+            <FiMessageSquare size={32} style={{ marginBottom: '12px', opacity: 0.5 }} />
+            <div>No communication logged yet.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {(logs || []).map((log, i) => (
+              <div key={log.id} style={{ display: 'flex', gap: '14px', position: 'relative' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                    background: log.communication_type === 'Call' ? '#059669' : log.communication_type === 'Email' ? '#3b82f6' : '#8b5cf6', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1
+                  }}>
+                    {log.communication_type === 'Call' ? <FiPhoneCall size={14} /> : log.communication_type === 'Email' ? <FiMail size={14} /> : <FiMessageSquare size={14} />}
+                  </div>
+                  {i < logs.length - 1 && <div style={{ width: '2px', flex: 1, background: '#e2e8f0', minHeight: '20px' }} />}
+                </div>
+                <div style={{ paddingBottom: '20px', flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{log.hr_name} <span style={{ color: '#94a3b8', fontWeight: 500 }}>via {log.communication_type}</span></div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{fmtDate(log.created_at)} ({cvAge(log.created_at)})</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9', fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>
+                    {log.notes}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const tabContent = {
     snapshot: SnapshotContent,
     personal: PersonalContent,
@@ -658,6 +775,7 @@ export default function CandidateDetail() {
     employer: EmployerContent,
     test: TestResultsContent,
     activity: ActivitiesContent,
+    communication: CommunicationContent,
   };
 
   const ActiveTabComponent = tabContent[tab];
@@ -678,25 +796,25 @@ export default function CandidateDetail() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: '1px solid #e2e8f0', background: '#fff', padding: '0 24px', flexShrink: 0
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0', overflowX: 'auto', flex: 1, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           <button onClick={() => nav('/admin/applicants')} style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '14px 16px 14px 8px', background: 'none', border: 'none',
-            cursor: 'pointer', color: '#64748b', fontSize: '13px', fontWeight: 600,
+            padding: '12px 10px 12px 0px', background: 'none', border: 'none',
+            cursor: 'pointer', color: '#64748b', fontSize: '12px', fontWeight: 600,
             borderRight: '1px solid #e2e8f0', marginRight: '4px'
           }}>
-            <FiArrowLeft size={15} />
+            <FiArrowLeft size={14} />
           </button>
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '14px 16px', background: 'none', border: 'none',
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '12px 10px', background: 'none', border: 'none',
                 borderBottom: tab === t.key ? '2px solid #0B2F5B' : '2px solid transparent',
                 color: tab === t.key ? '#0B2F5B' : '#94a3b8',
-                fontSize: '13px', fontWeight: tab === t.key ? 700 : 500,
+                fontSize: '11px', fontWeight: tab === t.key ? 700 : 500,
                 cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap'
               }}
             >
@@ -706,10 +824,10 @@ export default function CandidateDetail() {
         </div>
 
         {/* Right actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', flexShrink: 0 }}>
           {saveMsg && (
             <span style={{
-              fontSize: '12px', fontWeight: 700, padding: '4px 12px', borderRadius: '20px',
+              fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: '20px',
               background: saveMsg.startsWith('Error') ? '#fef2f2' : '#f0fdf4',
               color: saveMsg.startsWith('Error') ? '#dc2626' : '#059669',
               animation: 'fadeIn 0.3s ease'
@@ -718,32 +836,32 @@ export default function CandidateDetail() {
           {editing ? (
             <>
               <button onClick={handleSave} disabled={saving} style={{
-                display: 'flex', alignItems: 'center', gap: '5px',
-                padding: '8px 18px', background: '#0B2F5B', color: '#fff',
-                border: 'none', borderRadius: '8px', cursor: saving ? 'not-allowed' : 'pointer',
-                fontSize: '12px', fontWeight: 700
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 12px', background: '#0B2F5B', color: '#fff',
+                border: 'none', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer',
+                fontSize: '11px', fontWeight: 700
               }}>
-                {saving ? <FiLoader size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <FiSave size={12} />}
+                {saving ? <FiLoader size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <FiSave size={11} />}
                 {saving ? 'Saving...' : 'Save'}
               </button>
               <button onClick={handleCancel} style={{
-                display: 'flex', alignItems: 'center', gap: '5px',
-                padding: '8px 18px', background: '#fff', color: '#64748b',
-                border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer',
-                fontSize: '12px', fontWeight: 700
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 12px', background: '#fff', color: '#64748b',
+                border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer',
+                fontSize: '11px', fontWeight: 700
               }}>
-                <FiX size={12} /> Cancel
+                <FiX size={11} /> Cancel
               </button>
             </>
           ) : (
             <>
             <button onClick={() => setEditing(true)} className="action-btn" style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '6px 14px', background: '#fff', color: '#0B2F5B',
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '5px 10px', background: '#fff', color: '#0B2F5B',
               border: '1px solid #0B2F5B40', borderRadius: '6px', cursor: 'pointer',
-              fontSize: '11px', fontWeight: 600
+              fontSize: '10px', fontWeight: 600
             }}>
-              <FiEdit3 size={12} /> Edit Applicant
+              <FiEdit3 size={11} /> Edit Applicant
             </button>
             </>
           )}
@@ -842,6 +960,54 @@ export default function CandidateDetail() {
           </div>
         </div>
       )}
+      {/* ── Log Communication Modal ── */}
+      {showLogModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }} onClick={() => setShowLogModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '460px', overflow: 'hidden',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)', animation: 'fadeIn 0.2s ease'
+          }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FiPhoneCall size={20} style={{ color: '#0B2F5B' }} /> Log Communication
+              </h3>
+              <button onClick={() => setShowLogModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><FiX size={20} /></button>
+            </div>
+            <div style={{ padding: '24px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Communication Type</label>
+                <select value={newLogType} onChange={e => setNewLogType(e.target.value)} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', outline: 'none' }}>
+                  <option value="Call">Call</option>
+                  <option value="Email">Email</option>
+                  <option value="LinkedIn">LinkedIn</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Notes</label>
+                <textarea 
+                  rows="4"
+                  placeholder="Enter communication notes... (e.g. Talked about notice period)" 
+                  value={newLogNotes} 
+                  onChange={e => setNewLogNotes(e.target.value)} 
+                  style={{ width: '100%', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }} 
+                />
+              </div>
+              <button disabled={addingLog || !newLogNotes.trim()} onClick={handleAddLog} style={{
+                width: '100%', padding: '14px', background: addingLog || !newLogNotes.trim() ? '#94a3b8' : '#0B2F5B', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 700, cursor: addingLog || !newLogNotes.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+              }}>
+                {addingLog ? <FiLoader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <FiCheckCircle size={16} />}
+                {addingLog ? 'Saving...' : 'Save Log'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

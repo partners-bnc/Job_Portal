@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { jobService } from "../../services/jobService.js";
+import { supabase } from "../../services/supabaseClient.js";
 
 function StatCard({ icon, label, value, color, bg }) {
   return (
@@ -28,6 +29,7 @@ export default function AdminDashboard() {
   const [candidates, setCandidates] = useState([]);
   const [dbCandidates, setDbCandidates] = useState([]);
   const [shortlisted, setShortlisted] = useState([]);
+  const [commLogs, setCommLogs] = useState([]);
   const [clients, setClients] = useState([]);
   const [clientJobs, setClientJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,18 +38,20 @@ export default function AdminDashboard() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [j, c, db, s, clientsData, cj] = await Promise.all([
+      const [j, c, db, s, clientsData, cj, { data: logsData }] = await Promise.all([
         jobService.fetchJobs(), 
         jobService.fetchCandidates(),
         jobService.getDatabaseCandidates(),
         jobService.getShortlistedCandidates(),
         jobService.fetchClients(),
-        jobService.fetchClientJobs()
+        jobService.fetchClientJobs(),
+        supabase.from('communication_logs').select('hr_name, created_at')
       ]);
       setJobs(j || []);
       setCandidates(c || []);
       setDbCandidates(db || []);
       setShortlisted(s || []);
+      setCommLogs(logsData || []);
       setClients(clientsData || []);
       setClientJobs((cj || []).filter(j => j.status?.toLowerCase() === 'active'));
       setLoading(false);
@@ -69,7 +73,7 @@ export default function AdminDashboard() {
         if (isNaN(d.getTime()) || d.toISOString().split('T')[0] !== hrDateFilter) return;
       }
       const hr = c.uploadedBy || 'Portal / Unknown';
-      if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0 };
+      if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0, calls: 0 };
       stats[hr].uploaded += 1;
     });
 
@@ -80,12 +84,25 @@ export default function AdminDashboard() {
         if (isNaN(d.getTime()) || d.toISOString().split('T')[0] !== hrDateFilter) return;
       }
       const hr = s.shortlistedBy || 'Portal / Unknown';
-      if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0 };
+      if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0, calls: 0 };
       stats[hr].tagged += 1;
     });
 
+    // Process Calls Logged
+    commLogs.forEach(log => {
+      if (hrDateFilter) {
+        const d = new Date(log.created_at);
+        if (isNaN(d.getTime()) || d.toISOString().split('T')[0] !== hrDateFilter) return;
+      }
+      if (log.hr_name) {
+        const hr = log.hr_name;
+        if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0, calls: 0 };
+        stats[hr].calls += 1;
+      }
+    });
+
     return Object.entries(stats).sort((a, b) => b[1].uploaded - a[1].uploaded);
-  }, [dbCandidates, shortlisted, hrDateFilter]);
+  }, [dbCandidates, shortlisted, commLogs, hrDateFilter]);
 
   const COLORS = ['#0b2f5b', '#059669', '#d97706', '#7c3aed', '#db2777', '#2563eb', '#ea580c'];
 
@@ -185,6 +202,7 @@ export default function AdminDashboard() {
                     <th style={{ padding: "12px 20px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>HR Name</th>
                     <th style={{ padding: "12px 20px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Uploaded</th>
                     <th style={{ padding: "12px 20px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tagged CVs</th>
+                    <th style={{ padding: "12px 20px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Calls Logged</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,6 +226,9 @@ export default function AdminDashboard() {
                       </td>
                       <td style={{ padding: "14px 20px", textAlign: "center", fontSize: "15px", fontWeight: 700, color: "#16a34a" }}>
                         {data.tagged}
+                      </td>
+                      <td style={{ padding: "14px 20px", textAlign: "center", fontSize: "15px", fontWeight: 700, color: "#7c3aed" }}>
+                        {data.calls}
                       </td>
                     </tr>
                   ))}
