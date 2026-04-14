@@ -113,11 +113,29 @@ async function extractText(file) {
   throw new Error('Unsupported file type');
 }
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+async function fileToBase64(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+const GEMINI_API_KEY =
+  (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
+  import.meta.env.VITE_GEMINI_API_KEY;
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const NORMALIZED_GEMINI_API_KEY = GEMINI_API_KEY?.trim();
+const NORMALIZED_GROQ_API_KEY = GROQ_API_KEY?.trim();
 
 /**
- * Common prompt for both OpenAI and Groq
+ * Common prompt for Gemini and Groq
  */
 function getResumePrompt(resumeText, extended = false) {
   const extraFields = extended ? `,
@@ -170,46 +188,82 @@ async function fetchWithRetry(url, options, maxRetries = 1) {
 }
 
 /**
- * Intelligent field extraction — Uses OpenAI if available, else falls back to Groq.
+ * Intelligent field extraction — Uses Gemini if available, else falls back to Groq.
  */
-async function extractFieldsWithAI(resumeText, extended = false) {
+async function extractFieldsWithAI(resumeText, extended = false, file = null) {
   const prompt = getResumePrompt(resumeText, extended);
+  let geminiFailure = null;
   
-  // Try OpenAI first if key exists
-  if (OPENAI_API_KEY && OPENAI_API_KEY.length > 10) {
+  // Try Gemini first if key exists
+  if (NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) {
     try {
-      const response = await fetchWithRetry('/api/openai/v1/chat/completions', {
+      const parts = [];
+
+      // Use Gemini's native multimodal document understanding for PDFs/images.
+      if (
+        file &&
+        (file.type === 'application/pdf' || file.type.startsWith('image/'))
+      ) {
+        parts.push({
+          inline_data: {
+            mime_type: file.type,
+            data: await fileToBase64(file),
+          },
+        });
+      }
+
+      parts.push({ text: prompt });
+
+      const response = await fetchWithRetry(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          'x-goog-api-key': NORMALIZED_GEMINI_API_KEY,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: 'You are a precise resume parser. Return only JSON.' }, { role: 'user', content: prompt }],
-          temperature: 0.1,
-          response_format: { type: 'json_object' },
+          contents: [{ parts }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
         }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
-        const data = await response.json();
-        return JSON.parse(data.choices[0].message.content);
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!content) throw new Error('Empty response from Gemini');
+        return JSON.parse(content);
       }
-      console.warn('OpenAI failed, falling back to Groq...');
+
+      const apiMessage =
+        data?.error?.message ||
+        data?.promptFeedback?.blockReason ||
+        `Gemini API error: ${response.status}`;
+      geminiFailure = new Error(apiMessage);
+      console.warn('Gemini failed, falling back to Groq...', geminiFailure);
     } catch (err) {
-      console.error('OpenAI error:', err);
+      geminiFailure = err instanceof Error ? err : new Error(String(err));
+      console.error('Gemini error:', err);
     }
   }
 
   // Fallback to Groq
-  if (!GROQ_API_KEY) throw new Error('No AI API keys configured.');
+  if (!NORMALIZED_GROQ_API_KEY) {
+    if (geminiFailure) {
+      throw geminiFailure;
+    }
+    throw new Error('No AI API keys configured. Set VITE_GEMINI_API_KEY or VITE_GROQ_API_KEY.');
+  }
 
   const response = await fetchWithRetry('/api/groq/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
+      Authorization: `Bearer ${NORMALIZED_GROQ_API_KEY}`,
     },
     body: JSON.stringify({
       model: 'llama-3.1-8b-instant',
@@ -237,7 +291,7 @@ async function extractFieldsWithAI(resumeText, extended = false) {
 // ─────────────────────────────────────────────
 
 /**
- * Parse a resume file and extract all available fields using Groq AI.
+ * Parse a resume file and extract all available fields using Gemini/Groq AI.
  * Returns an object with extracted data and a set of auto-filled field names.
  */
 export async function parseResume(file, onProgress) {
@@ -250,8 +304,12 @@ export async function parseResume(file, onProgress) {
     // Step 1: Extract text from file
     if (onProgress) onProgress('extracting');
     const text = await extractText(file);
+    const canUseGeminiDocumentInput =
+      Boolean(NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) &&
+      file &&
+      file.type === 'application/pdf';
 
-    if (!text || text.trim().length < 20) {
+    if ((!text || text.trim().length < 20) && !canUseGeminiDocumentInput) {
       console.warn('Not enough text extracted from resume');
       return result;
     }
@@ -259,11 +317,11 @@ export async function parseResume(file, onProgress) {
     console.log('Extracted resume text length:', text.length);
     console.log('First 500 chars:', text.substring(0, 500));
 
-    // Step 2: Send to Groq AI for intelligent extraction
+    // Step 2: Send to Gemini/Groq AI for intelligent extraction
     if (onProgress) onProgress('contact');
     
-    const extracted = await extractFieldsWithAI(text, false);
-    console.log('Groq extracted fields:', extracted);
+    const extracted = await extractFieldsWithAI(text, false, file);
+    console.log('AI extracted fields:', extracted);
 
     if (onProgress) onProgress('education');
 
@@ -331,15 +389,19 @@ export async function parseResumeForDatabase(file, onProgress) {
 
   if (onProgress) onProgress('extracting');
   const text = await extractText(file);
+  const canUseGeminiDocumentInput =
+    Boolean(NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) &&
+    file &&
+    file.type === 'application/pdf';
 
-  if (!text || text.trim().length < 20) {
+  if ((!text || text.trim().length < 20) && !canUseGeminiDocumentInput) {
     throw new Error('Could not extract readable text from this resume. The PDF may be image-based or corrupted.');
   }
 
   if (onProgress) onProgress('contact');
 
-  // This will throw if Groq API fails — caller handles it
-  const extracted = await extractFieldsWithAI(text, true);
+  // This will throw if Gemini/Groq parsing fails — caller handles it
+  const extracted = await extractFieldsWithAI(text, true, file);
 
 
   if (onProgress) onProgress('education');

@@ -1,6 +1,7 @@
 import { supabase, SUPABASE_URL } from './supabaseClient.js';
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const SUPABASE_PAGE_SIZE = 1000;
 const cache = {
   jobs: { data: null, timestamp: 0 },
   candidates: { data: null, timestamp: 0 },
@@ -358,7 +359,8 @@ export const jobService = {
       // Upload PDF named CandidateName_ExistingID.pdf — THROW on failure
       let resumeUrl = null;
       if (cvData.resumeData && cvData.resumeFileName) {
-        const storageName = `${(cvData.candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_')}_${applicantCode}`;
+        const safeName = (cvData.candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_');
+        const storageName = `${applicantCode}_${safeName}`;
         resumeUrl = await this.uploadResume(cvData.resumeData, cvData.resumeFileName, cvData.candidateName, storageName);
         // uploadResume throws on failure — so if we reach here, it succeeded
       }
@@ -423,7 +425,8 @@ export const jobService = {
     // ── Upload PDF now that we have the applicant ID ───────────────────
     if (cvData.resumeData && cvData.resumeFileName) {
       try {
-        const storageName = `${(cvData.candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_')}_${newId}`;
+        const safeName = (cvData.candidateName || 'Resume').replace(/[^a-zA-Z0-9]/g, '_');
+        const storageName = `${newId}_${safeName}`;
         const resumeUrl = await this.uploadResume(cvData.resumeData, cvData.resumeFileName, cvData.candidateName, storageName);
 
         // Update the record with the real resume URL
@@ -451,13 +454,27 @@ export const jobService = {
       return cache.databaseCandidates.data;
     }
     try {
-      const { data, error } = await supabase
-        .from('applicants')
-        .select('*')
-        .order('created_on', { ascending: false });
+      const rows = [];
+      let from = 0;
 
-      if (error) throw error;
-      const candidates = (data || []).map(r => ({
+      while (true) {
+        const to = from + SUPABASE_PAGE_SIZE - 1;
+        const { data, error } = await supabase
+          .from('applicants')
+          .select('*')
+          .order('created_on', { ascending: false })
+          .range(from, to);
+
+        if (error) throw error;
+        if (!data?.length) break;
+
+        rows.push(...data);
+
+        if (data.length < SUPABASE_PAGE_SIZE) break;
+        from += SUPABASE_PAGE_SIZE;
+      }
+
+      const candidates = rows.map(r => ({
         applicantId: r.applicant_code || '', _uuid: r.id,
         timestamp: r.timestamp || '', source: r.source || '',
         name: r.full_name || '', email: r.email || '',
