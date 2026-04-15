@@ -2,6 +2,7 @@
 {
   "rewrites": [
     { "source": "/api/groq/:match*", "destination": "https://api.groq.com/:match*" },
+    { "source": "/api/admin/parse-resume", "destination": "/api/admin/parse-resume" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

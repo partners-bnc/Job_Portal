@@ -1,20 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 
-// Configure pdf.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
   import.meta.url
 ).toString();
 
-// ─────────────────────────────────────────────
-// TEXT EXTRACTION (improved with Y-coordinate line breaks)
-// ─────────────────────────────────────────────
-
-/**
- * Extract raw text from a PDF file with proper line breaks
- * Uses Y-coordinate positions to reconstruct the document layout
- */
 async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -27,19 +18,16 @@ async function extractTextFromPDF(file) {
 
     if (items.length === 0) continue;
 
-    // Group items by Y position (same Y = same line)
-    // PDF Y coordinates go bottom-to-top, so we sort descending
     const lineMap = new Map();
-    const Y_THRESHOLD = 3; // items within 3 units of Y are on the same line
+    const yThreshold = 3;
 
     for (const item of items) {
-      const y = Math.round(item.transform[5]); // Y position
-      const x = item.transform[4]; // X position
+      const y = Math.round(item.transform[5]);
+      const x = item.transform[4];
 
-      // Find existing line within threshold
       let foundKey = null;
       for (const key of lineMap.keys()) {
-        if (Math.abs(key - y) <= Y_THRESHOLD) {
+        if (Math.abs(key - y) <= yThreshold) {
           foundKey = key;
           break;
         }
@@ -52,20 +40,17 @@ async function extractTextFromPDF(file) {
       }
     }
 
-    // Sort lines top-to-bottom (descending Y in PDF coords)
     const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
 
     for (const y of sortedYs) {
       const lineItems = lineMap.get(y).sort((a, b) => a.x - b.x);
-
-      // Join items with smart spacing
       let lineText = '';
+
       for (let j = 0; j < lineItems.length; j++) {
         const item = lineItems[j];
         if (j > 0) {
           const prevItem = lineItems[j - 1];
-          const gap = item.x - (prevItem.x + prevItem.text.length * 3.5); // rough char width
-          // Add space only if there's a meaningful gap
+          const gap = item.x - (prevItem.x + prevItem.text.length * 3.5);
           if (gap > 2 || lineText.length === 0 || !lineText.endsWith(' ')) {
             lineText += ' ';
           }
@@ -79,7 +64,6 @@ async function extractTextFromPDF(file) {
       }
     }
 
-    // Add page separator
     if (i < pdf.numPages) {
       allLines.push('');
     }
@@ -88,28 +72,24 @@ async function extractTextFromPDF(file) {
   return allLines.join('\n');
 }
 
-/**
- * Extract raw text from a DOCX file
- */
 async function extractTextFromDOCX(file) {
   const arrayBuffer = await file.arrayBuffer();
   const result = await mammoth.extractRawText({ arrayBuffer });
   return result.value;
 }
 
-/**
- * Extract text from any supported file
- */
 async function extractText(file) {
   if (file.type === 'application/pdf') {
-    return await extractTextFromPDF(file);
-  } else if (
-    file.type === 'application/msword' ||
-    file.type ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
-    return await extractTextFromDOCX(file);
+    return extractTextFromPDF(file);
   }
+
+  if (
+    file.type === 'application/msword' ||
+    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    return extractTextFromDOCX(file);
+  }
+
   throw new Error('Unsupported file type');
 }
 
@@ -131,12 +111,15 @@ const GEMINI_API_KEY =
   (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
   import.meta.env.VITE_GEMINI_API_KEY;
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_API_KEYS = [
+  import.meta.env.VITE_GROQ_API_KEY_1,
+  import.meta.env.VITE_GROQ_API_KEY_2,
+  import.meta.env.VITE_GROQ_API_KEY_3,
+].map((key) => key?.trim()).filter(Boolean);
 const NORMALIZED_GEMINI_API_KEY = GEMINI_API_KEY?.trim();
 const NORMALIZED_GROQ_API_KEY = GROQ_API_KEY?.trim();
+const VALID_EXPERIENCE_VALUES = ['0', '1', '2', '3', '4', '5', '6-10', '10+'];
 
-/**
- * Common prompt for Gemini and Groq
- */
 function getResumePrompt(resumeText, extended = false) {
   const extraFields = extended ? `,
   "skills": "Comma-separated list of all technical skills, tools, technologies, soft skills, and domain keywords found in the resume (string or null)",
@@ -170,16 +153,13 @@ IMPORTANT RULES:
 - If you are not confident about a field, return null for that field`;
 }
 
-/**
- * Generic fetch with retry logic for 429
- */
 async function fetchWithRetry(url, options, maxRetries = 1) {
   let attempts = 0;
   while (attempts <= maxRetries) {
     const response = await fetch(url, options);
     if (response.status === 429 && attempts < maxRetries) {
       console.warn(`Rate limited (429). Retrying in 5s... (Attempt ${attempts + 1})`);
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       attempts++;
       continue;
     }
@@ -187,19 +167,14 @@ async function fetchWithRetry(url, options, maxRetries = 1) {
   }
 }
 
-/**
- * Intelligent field extraction — Uses Gemini if available, else falls back to Groq.
- */
 async function extractFieldsWithAI(resumeText, extended = false, file = null) {
   const prompt = getResumePrompt(resumeText, extended);
   let geminiFailure = null;
-  
-  // Try Gemini first if key exists
+
   if (NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) {
     try {
       const parts = [];
 
-      // Use Gemini's native multimodal document understanding for PDFs/images.
       if (
         file &&
         (file.type === 'application/pdf' || file.type.startsWith('image/'))
@@ -217,19 +192,20 @@ async function extractFieldsWithAI(resumeText, extended = false, file = null) {
       const response = await fetchWithRetry(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': NORMALIZED_GEMINI_API_KEY,
-        },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: 'application/json',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': NORMALIZED_GEMINI_API_KEY,
           },
-        }),
-      });
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
+          }),
+        }
+      );
 
       const data = await response.json();
 
@@ -251,7 +227,6 @@ async function extractFieldsWithAI(resumeText, extended = false, file = null) {
     }
   }
 
-  // Fallback to Groq
   if (!NORMALIZED_GROQ_API_KEY) {
     if (geminiFailure) {
       throw geminiFailure;
@@ -267,11 +242,13 @@ async function extractFieldsWithAI(resumeText, extended = false, file = null) {
     },
     body: JSON.stringify({
       model: 'llama-3.1-8b-instant',
-      messages: [{ role: 'system', content: 'You are a precise resume parser. Return only JSON.' }, { role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: 'You are a precise resume parser. Return only JSON.' },
+        { role: 'user', content: prompt },
+      ],
       temperature: 0.1,
       response_format: { type: 'json_object' },
     }),
-
   });
 
   if (!response.ok) {
@@ -285,15 +262,162 @@ async function extractFieldsWithAI(resumeText, extended = false, file = null) {
   return JSON.parse(content);
 }
 
+async function extractFieldsWithAdminGroq(resumeText, extended = true, rotationIndex = 0) {
+  const response = await fetch('/api/admin/parse-resume', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      resumeText,
+      extended,
+      rotationIndex,
+    }),
+  });
 
-// ─────────────────────────────────────────────
-// MAIN PARSE FUNCTION
-// ─────────────────────────────────────────────
+  const payload = await response.json().catch(() => ({}));
 
-/**
- * Parse a resume file and extract all available fields using Gemini/Groq AI.
- * Returns an object with extracted data and a set of auto-filled field names.
- */
+  if (!response.ok) {
+    throw new Error(payload?.error || `Admin parse API error: ${response.status}`);
+  }
+
+  return {
+    parsed: payload?.parsed || {},
+    keyIndex: payload?.keyIndex ?? null,
+  };
+}
+
+async function extractFieldsWithClientGroqRotation(resumeText, extended = true, rotationIndex = 0) {
+  if (!GROQ_API_KEYS.length) {
+    throw new Error('No local Groq rotation keys configured. Add VITE_GROQ_API_KEY_1, VITE_GROQ_API_KEY_2, and VITE_GROQ_API_KEY_3 to .env.');
+  }
+
+  const prompt = getResumePrompt(resumeText, extended);
+  const maxAttempts = Math.max(GROQ_API_KEYS.length, 6);
+  const normalizedStart = ((rotationIndex % GROQ_API_KEYS.length) + GROQ_API_KEYS.length) % GROQ_API_KEYS.length;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const keyIndex = (normalizedStart + attempt) % GROQ_API_KEYS.length;
+    const currentKey = GROQ_API_KEYS[keyIndex];
+
+    const response = await fetch('/api/groq/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${currentKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: 'You are a precise resume parser. Return only JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    const rawText = await response.text();
+
+    if (response.ok) {
+      const payload = JSON.parse(rawText);
+      const content = payload?.choices?.[0]?.message?.content;
+      if (!content) {
+        lastError = new Error('Empty response from Groq');
+      } else {
+        return {
+          parsed: JSON.parse(content),
+          keyIndex,
+        };
+      }
+    } else {
+      lastError = new Error(`Groq API error: ${response.status} ${rawText.substring(0, 120)}`);
+    }
+
+    const retryable = response.status === 429 || response.status >= 500 || String(lastError.message).toLowerCase().includes('rate limit');
+    if (!retryable || attempt === maxAttempts - 1) {
+      break;
+    }
+
+    await sleep(1000);
+  }
+
+  throw lastError || new Error('Groq parsing failed');
+}
+
+async function extractFieldsWithAdminFallback(resumeText, extended = true, rotationIndex = 0) {
+  try {
+    return await extractFieldsWithAdminGroq(resumeText, extended, rotationIndex);
+  } catch (error) {
+    const isMissingLocalRoute =
+      import.meta.env.DEV &&
+      (String(error?.message || '').includes('404') || String(error?.message || '').includes('Failed to fetch'));
+
+    if (!isMissingLocalRoute) {
+      throw error;
+    }
+
+    return extractFieldsWithClientGroqRotation(resumeText, extended, rotationIndex);
+  }
+}
+
+function normalizeParsedFields(extracted, extended = false) {
+  const result = {
+    data: {},
+    autoFilledFields: new Set(),
+  };
+
+  const fieldMap = {
+    candidateName: extracted.candidateName,
+    email: extracted.email,
+    contactNumber: extracted.contactNumber,
+    currentLocation: extracted.currentLocation,
+    education: extracted.recentEducation,
+    totalExperience: extracted.totalExperience,
+    currentCompany: extracted.currentCompany,
+    currentPosition: extracted.currentPosition,
+    ...(extended
+      ? {
+          skills: extracted.skills,
+          certifications: extracted.certifications,
+          summary: extracted.summary,
+        }
+      : {}),
+  };
+
+  for (const [key, value] of Object.entries(fieldMap)) {
+    if (value === null || value === undefined || value === '') continue;
+
+    if (key === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) continue;
+    }
+
+    if (key === 'totalExperience' && !VALID_EXPERIENCE_VALUES.includes(value)) {
+      continue;
+    }
+
+    result.data[key] = value;
+    result.autoFilledFields.add(key);
+  }
+
+  return result;
+}
+
+function canUseGeminiDocumentInput(file) {
+  return Boolean(NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) &&
+    file &&
+    file.type === 'application/pdf';
+}
+
+function ensureIdentifyingFields(result) {
+  const hasMinimum = result.data.candidateName || result.data.email || result.data.contactNumber;
+  if (!hasMinimum) {
+    throw new Error('AI could not extract any identifying information (name, email, or phone) from this resume. Please check the file quality.');
+  }
+}
+
 export async function parseResume(file, onProgress) {
   const result = {
     data: {},
@@ -301,31 +425,21 @@ export async function parseResume(file, onProgress) {
   };
 
   try {
-    // Step 1: Extract text from file
     if (onProgress) onProgress('extracting');
     const text = await extractText(file);
-    const canUseGeminiDocumentInput =
-      Boolean(NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) &&
-      file &&
-      file.type === 'application/pdf';
+    const geminiEnabled = canUseGeminiDocumentInput(file);
 
-    if ((!text || text.trim().length < 20) && !canUseGeminiDocumentInput) {
+    if ((!text || text.trim().length < 20) && !geminiEnabled) {
       console.warn('Not enough text extracted from resume');
       return result;
     }
 
-    console.log('Extracted resume text length:', text.length);
-    console.log('First 500 chars:', text.substring(0, 500));
-
-    // Step 2: Send to Gemini/Groq AI for intelligent extraction
     if (onProgress) onProgress('contact');
-    
+
     const extracted = await extractFieldsWithAI(text, false, file);
-    console.log('AI extracted fields:', extracted);
 
     if (onProgress) onProgress('education');
 
-    // Step 3: Map extracted fields to form data
     const fieldMap = {
       candidateName: extracted.candidateName,
       email: extracted.email,
@@ -339,27 +453,15 @@ export async function parseResume(file, onProgress) {
 
     if (onProgress) onProgress('experience');
 
-    // Only include fields that were actually extracted (non-null)
     for (const [key, value] of Object.entries(fieldMap)) {
       if (value !== null && value !== undefined && value !== '') {
-        // Validate specific fields
         if (key === 'email') {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(value)) continue;
         }
 
         if (key === 'totalExperience') {
-          const validValues = [
-            '0',
-            '1',
-            '2',
-            '3',
-            '4',
-            '5',
-            '6-10',
-            '10+',
-          ];
-          if (!validValues.includes(value)) continue;
+          if (!VALID_EXPERIENCE_VALUES.includes(value)) continue;
         }
 
         result.data[key] = value;
@@ -376,74 +478,52 @@ export async function parseResume(file, onProgress) {
   return result;
 }
 
-/**
- * Extended resume parser for HR CV uploads.
- * Returns all standard fields PLUS skills and summary.
- * THROWS on AI failure or insufficient parsed data so callers can skip DB insert.
- */
 export async function parseResumeForDatabase(file, onProgress) {
-  const result = {
-    data: {},
-    autoFilledFields: new Set(),
-  };
-
   if (onProgress) onProgress('extracting');
   const text = await extractText(file);
-  const canUseGeminiDocumentInput =
-    Boolean(NORMALIZED_GEMINI_API_KEY && NORMALIZED_GEMINI_API_KEY.length > 10) &&
-    file &&
-    file.type === 'application/pdf';
+  const geminiEnabled = canUseGeminiDocumentInput(file);
 
-  if ((!text || text.trim().length < 20) && !canUseGeminiDocumentInput) {
+  if ((!text || text.trim().length < 20) && !geminiEnabled) {
     throw new Error('Could not extract readable text from this resume. The PDF may be image-based or corrupted.');
   }
 
   if (onProgress) onProgress('contact');
 
-  // This will throw if Gemini/Groq parsing fails — caller handles it
-  const extracted = await extractFieldsWithAI(text, true, file);
-
+  const extracted = geminiEnabled
+    ? await extractFieldsWithAI(text, true, file)
+    : (await extractFieldsWithAdminFallback(text, true)).parsed;
 
   if (onProgress) onProgress('education');
-
-  const fieldMap = {
-    candidateName: extracted.candidateName,
-    email: extracted.email,
-    contactNumber: extracted.contactNumber,
-    currentLocation: extracted.currentLocation,
-    education: extracted.recentEducation,
-    totalExperience: extracted.totalExperience,
-    currentCompany: extracted.currentCompany,
-    currentPosition: extracted.currentPosition,
-    skills: extracted.skills,
-    certifications: extracted.certifications,
-    summary: extracted.summary,
-  };
-
+  const result = normalizeParsedFields(extracted, true);
   if (onProgress) onProgress('experience');
 
-  for (const [key, value] of Object.entries(fieldMap)) {
-    if (value !== null && value !== undefined && value !== '') {
-      if (key === 'email') {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(value)) continue;
-      }
-      if (key === 'totalExperience') {
-        const validValues = ['0','1','2','3','4','5','6-10','10+'];
-        if (!validValues.includes(value)) continue;
-      }
-      result.data[key] = value;
-      result.autoFilledFields.add(key);
-    }
-  }
-
-  // Minimum data gate: need at least name OR email OR phone
-  const hasMinimum = result.data.candidateName || result.data.email || result.data.contactNumber;
-  if (!hasMinimum) {
-    throw new Error('AI could not extract any identifying information (name, email, or phone) from this resume. Please check the file quality.');
-  }
+  ensureIdentifyingFields(result);
 
   if (onProgress) onProgress('done');
   return result;
 }
 
+export async function parseResumeForDatabaseWithRotation(file, rotationIndex = 0, onProgress) {
+  if (onProgress) onProgress('extracting');
+  const text = await extractText(file);
+  const geminiEnabled = canUseGeminiDocumentInput(file);
+
+  if ((!text || text.trim().length < 20) && !geminiEnabled) {
+    throw new Error('Could not extract readable text from this resume. The PDF may be image-based or corrupted.');
+  }
+
+  if (onProgress) onProgress('contact');
+
+  const extracted = geminiEnabled
+    ? await extractFieldsWithAI(text, true, file)
+    : (await extractFieldsWithAdminFallback(text, true, rotationIndex)).parsed;
+
+  if (onProgress) onProgress('education');
+  const result = normalizeParsedFields(extracted, true);
+  if (onProgress) onProgress('experience');
+
+  ensureIdentifyingFields(result);
+
+  if (onProgress) onProgress('done');
+  return result;
+}

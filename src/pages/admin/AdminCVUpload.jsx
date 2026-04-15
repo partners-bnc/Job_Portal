@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { jobService } from '../../services/jobService.js';
-import { parseResumeForDatabase } from '../../services/resumeParser.js';
+import { parseResumeForDatabase, parseResumeForDatabaseWithRotation } from '../../services/resumeParser.js';
 import {
   FiUpload, FiFile, FiX, FiCheck, FiZap, FiLoader, FiUser,
   FiPhone, FiMail, FiMapPin, FiBriefcase, FiBookOpen, FiTag,
@@ -11,6 +11,37 @@ import {
 
 // ── Helpers ──
 const SOURCE_OPTIONS = ['LinkedIn', 'Naukri', 'Indeed', 'Referral', 'Walk-in', 'Company Website', 'Other'];
+const BULK_PARSE_DELAY_MS = 3000;
+const MAX_BULK_AUTO_RETRY_ROUNDS = 3;
+const RETRYABLE_ERROR_PATTERNS = [
+  '429',
+  'rate limit',
+  'too many requests',
+  'timeout',
+  'network',
+  'fetch',
+  'temporar',
+  'overloaded',
+  'empty response',
+];
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function isRetryableBulkError(errorMessage) {
+  const text = String(errorMessage || '').toLowerCase();
+  return RETRYABLE_ERROR_PATTERNS.some(pattern => text.includes(pattern));
+}
 
 function cvAge(dateStr) {
   if (!dateStr) return '—';
@@ -392,35 +423,129 @@ function BulkUpload({ adminName }) {
   const [results, setResults] = useState([]);
   const [started, setStarted] = useState(false);
   const [error, setError] = useState('');
-  
-  // New control states
-  const [isPaused, setIsPaused] = useState(false);
   const [processingIndex, setProcessingIndex] = useState(0);
-  const [isCancelled, setIsCancelled] = useState(false);
-
   const fileInputRef = useRef();
+  const resultsRef = useRef([]);
 
-  const STATUS = { WAITING: 'waiting', PARSING: 'parsing', SAVING: 'saving', DONE: 'done', UPDATED: 'updated', FAILED: 'failed' };
+  const STATUS = {
+    WAITING: 'waiting',
+    PARSING: 'parsing',
+    RETRYING: 'retrying',
+    SAVING: 'saving',
+    DONE: 'done',
+    UPDATED: 'updated',
+    FAILED: 'failed'
+  };
 
   const handleFiles = (fileList) => {
     const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
     const valid = Array.from(fileList).filter(f => allowed.includes(f.type) && f.size <= 5 * 1024 * 1024);
     if (valid.length < fileList.length) setError(`${fileList.length - valid.length} file(s) skipped (invalid type or >5MB).`);
     else setError('');
-    
+
+    const nextResults = valid.map((f, index) => ({
+      name: f.name,
+      status: STATUS.WAITING,
+      id: null,
+      error: null,
+      attempts: 0,
+      keySlot: (index % 3) + 1,
+    }));
+
     setFiles(valid);
-    setResults(valid.map(f => ({ name: f.name, status: STATUS.WAITING, id: null, error: null })));
+    setResults(nextResults);
+    resultsRef.current = nextResults;
     setStarted(false);
     setProcessing(false);
-    setIsPaused(false);
     setProcessingIndex(0);
-    setIsCancelled(false);
   };
 
-  const statusColor = { [STATUS.WAITING]: '#94a3b8', [STATUS.PARSING]: '#f59e0b', [STATUS.SAVING]: '#3b82f6', [STATUS.DONE]: '#059669', [STATUS.UPDATED]: '#d97706', [STATUS.FAILED]: '#dc3545' };
-  const statusLabel = { [STATUS.WAITING]: 'Waiting', [STATUS.PARSING]: 'Parsing...', [STATUS.SAVING]: 'Saving...', [STATUS.DONE]: 'Added', [STATUS.UPDATED]: 'Updated', [STATUS.FAILED]: 'Failed' };
+  const statusColor = {
+    [STATUS.WAITING]: '#94a3b8',
+    [STATUS.PARSING]: '#f59e0b',
+    [STATUS.RETRYING]: '#c2410c',
+    [STATUS.SAVING]: '#3b82f6',
+    [STATUS.DONE]: '#059669',
+    [STATUS.UPDATED]: '#d97706',
+    [STATUS.FAILED]: '#dc3545'
+  };
+  const statusLabel = {
+    [STATUS.WAITING]: 'Waiting',
+    [STATUS.PARSING]: 'Parsing...',
+    [STATUS.RETRYING]: 'Retrying...',
+    [STATUS.SAVING]: 'Saving...',
+    [STATUS.DONE]: 'Added',
+    [STATUS.UPDATED]: 'Updated',
+    [STATUS.FAILED]: 'Failed'
+  };
 
-  const updateResult = (i, patch) => setResults(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  const updateResult = (i, patch) => setResults(prev => {
+    const next = prev.map((r, idx) => idx === i ? { ...r, ...patch } : r);
+    resultsRef.current = next;
+    return next;
+  });
+
+  const processSingleFile = async (file, index, attempt = 1) => {
+    updateResult(index, {
+      status: attempt > 1 ? STATUS.RETRYING : STATUS.PARSING,
+      error: null,
+      attempts: attempt,
+      keySlot: (index % 3) + 1,
+    });
+
+    const parsed = await parseResumeForDatabaseWithRotation(file, index, () => {});
+
+    updateResult(index, {
+      status: STATUS.SAVING,
+      attempts: attempt,
+    });
+
+    const base64 = await fileToBase64(file);
+    const saveResult = await jobService.uploadCVToDatabase({
+      ...parsed.data,
+      source,
+      uploadedBy: adminName,
+      resumeData: base64,
+      resumeFileName: file.name,
+    });
+
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Save failed');
+    }
+
+    updateResult(index, {
+      status: saveResult.isUpdate ? STATUS.UPDATED : STATUS.DONE,
+      id: saveResult.applicantId,
+      error: null,
+      attempts: attempt,
+    });
+  };
+
+  const runProcessingRound = async (indexes, attempt) => {
+    for (let cursor = 0; cursor < indexes.length; cursor++) {
+      if (!window._isBulkProcessing) break;
+
+      const index = indexes[cursor];
+      const file = files[index];
+      setProcessingIndex(index);
+
+      try {
+        if (cursor > 0 || attempt > 1) {
+          await sleep(BULK_PARSE_DELAY_MS);
+        }
+
+        if (!window._isBulkProcessing) break;
+        await processSingleFile(file, index, attempt);
+      } catch (e) {
+        updateResult(index, {
+          status: STATUS.FAILED,
+          error: e.message,
+          attempts: attempt,
+          keySlot: (index % 3) + 1,
+        });
+      }
+    }
+  };
 
   const handleStart = async () => {
     if (!source) { setError('Please select a source.'); return; }
@@ -428,61 +553,26 @@ function BulkUpload({ adminName }) {
     setError('');
     setStarted(true);
     setProcessing(true);
-    setIsPaused(false);
-    setIsCancelled(false);
 
-    for (let i = processingIndex; i < files.length; i++) {
-      if (!window._isBulkProcessing) break;
+    const initialIndexes = files.map((_, index) => index).filter(index => index >= processingIndex);
+    await runProcessingRound(initialIndexes, 1);
 
-      const file = files[i];
-      setProcessingIndex(i);
+    for (let attempt = 2; attempt <= MAX_BULK_AUTO_RETRY_ROUNDS && window._isBulkProcessing; attempt++) {
+      const retryIndexes = resultsRef.current
+        .map((r, index) => ({ ...r, index }))
+        .filter(r => r.status === STATUS.FAILED && isRetryableBulkError(r.error))
+        .map(r => r.index);
 
-      try {
-        // Throttling: Increased delay to 3.5s (3500ms) for Groq safety
-        if (i > processingIndex) {
-          await new Promise(resolve => setTimeout(resolve, 3500));
-        }
-        
-        if (!window._isBulkProcessing) break;
-
-        updateResult(i, { status: STATUS.PARSING });
-        const result = await parseResumeForDatabase(file, () => {});
-
-        updateResult(i, { status: STATUS.SAVING });
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        const saveResult = await jobService.uploadCVToDatabase({
-          ...result.data,
-          source,
-          uploadedBy: adminName,
-          resumeData: base64,
-          resumeFileName: file.name,
-        });
-
-        if (saveResult.success) {
-          const finalStatus = saveResult.isUpdate ? STATUS.UPDATED : STATUS.DONE;
-          updateResult(i, { status: finalStatus, id: saveResult.applicantId });
-        } else {
-          updateResult(i, { status: STATUS.FAILED, error: saveResult.error || 'Save failed' });
-        }
-      } catch (e) {
-        updateResult(i, { status: STATUS.FAILED, error: e.message });
-      }
-      
-      setProcessingIndex(i + 1);
+      if (!retryIndexes.length) break;
+      await runProcessingRound(retryIndexes, attempt);
     }
 
     setProcessing(false);
+    setProcessingIndex(files.length);
     window._isBulkProcessing = false;
   };
 
   const handleStop = () => {
-    setIsPaused(true);
     setProcessing(false);
     window._isBulkProcessing = false;
   };
@@ -490,9 +580,9 @@ function BulkUpload({ adminName }) {
   const handleCancel = () => {
     setFiles([]);
     setResults([]);
+    resultsRef.current = [];
     setStarted(false);
     setProcessing(false);
-    setIsPaused(false);
     setProcessingIndex(0);
     window._isBulkProcessing = false;
     setError('');
@@ -509,43 +599,11 @@ function BulkUpload({ adminName }) {
     setProcessing(true);
     window._isBulkProcessing = true;
 
-    const failedItems = results.map((r, i) => r.status === STATUS.FAILED ? i : -1).filter(i => i !== -1);
+    const failedItems = resultsRef.current
+      .map((r, i) => r.status === STATUS.FAILED ? i : -1)
+      .filter(i => i !== -1);
 
-    for (const i of failedItems) {
-      if (!window._isBulkProcessing) break;
-      const file = files[i];
-      try {
-        await new Promise(resolve => setTimeout(resolve, 3500));
-        if (!window._isBulkProcessing) break;
-
-        updateResult(i, { status: STATUS.PARSING, error: null });
-        const result = await parseResumeForDatabase(file, () => {});
-
-        updateResult(i, { status: STATUS.SAVING });
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        const saveResult = await jobService.uploadCVToDatabase({
-          ...result.data,
-          source,
-          uploadedBy: adminName,
-          resumeData: base64,
-          resumeFileName: file.name,
-        });
-
-        if (saveResult.success) {
-          updateResult(i, { status: saveResult.isUpdate ? STATUS.UPDATED : STATUS.DONE });
-        } else {
-          updateResult(i, { status: STATUS.FAILED, error: saveResult.error });
-        }
-      } catch (e) {
-        updateResult(i, { status: STATUS.FAILED, error: e.message });
-      }
-    }
+    await runProcessingRound(failedItems, 1);
     setProcessing(false);
     window._isBulkProcessing = false;
   };
@@ -636,7 +694,7 @@ function BulkUpload({ adminName }) {
               <div key={i} style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
                 padding: '10px 16px', borderBottom: i < results.length - 1 ? '1px solid #f1f5f9' : 'none',
-                background: r.status === STATUS.PARSING || r.status === STATUS.SAVING ? '#fffbeb' : r.status === STATUS.UPDATED ? '#fffbeb' : '#fff'
+                background: r.status === STATUS.PARSING || r.status === STATUS.RETRYING || r.status === STATUS.SAVING ? '#fffbeb' : r.status === STATUS.UPDATED ? '#fffbeb' : '#fff'
               }}>
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
@@ -650,6 +708,7 @@ function BulkUpload({ adminName }) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>Key {r.keySlot} • Attempt {r.attempts}</div>
                   {r.error && <div style={{ fontSize: '11px', color: '#dc2626' }}>{r.error}</div>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
@@ -719,7 +778,7 @@ function BulkUpload({ adminName }) {
             {failedCount > 0 ? `⚠ Batch partial — ${doneCount + updatedCount} saved, ${failedCount} failed` : `✓ Batch complete — ${doneCount} added${updatedCount > 0 ? `, ${updatedCount} updated` : ''}`}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => { setFiles([]); setResults([]); setStarted(false); }} style={{
+            <button onClick={() => { setFiles([]); setResults([]); resultsRef.current = []; setStarted(false); setProcessingIndex(0); }} style={{
               padding: '10px 24px', background: '#e2e8f0', color: '#475569',
               border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700
             }}>Clear All</button>
