@@ -436,7 +436,11 @@ export async function parseResume(file, onProgress) {
 
     if (onProgress) onProgress('contact');
 
-    const extracted = await extractFieldsWithAI(text, false, file);
+    const extracted = geminiEnabled
+      ? await extractFieldsWithAI(text, false, file)
+      : NORMALIZED_GROQ_API_KEY
+        ? await extractFieldsWithAI(text, false, file)
+        : (await extractFieldsWithAdminFallback(text, false)).parsed;
 
     if (onProgress) onProgress('education');
 

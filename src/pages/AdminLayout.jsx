@@ -184,7 +184,7 @@ export default function AdminLayout() {
           </div>
           {sidebarOpen && (
             <div>
-              <div style={{ color: "#312e81", fontWeight: 700, fontSize: "15px", lineHeight: 1.2 }}>BnC Global</div>
+              <div style={{ color: "#312e81", fontWeight: 700, fontSize: "15px", lineHeight: 1.2 }}>Ciedeck</div>
               <div style={{ color: "rgba(49, 46, 129, 0.6)", fontSize: "11px", fontWeight: 600 }}>Admin Panel</div>
             </div>
           )}

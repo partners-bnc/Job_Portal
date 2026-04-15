@@ -1,5 +1,7 @@
+import { useState } from "react";
 import Header from "../Component/Header.jsx";
 import Footer from "../Component/Footer.tsx";
+import { whatsappService } from "../services/whatsappService.js";
 
 const contactOptions = [
   {
@@ -212,6 +214,23 @@ const styles = {
 };
 
 export default function ContactUs() {
+  const [formData, setFormData] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    subject: "",
+    message: "",
+  });
+
+  const handleChange = (field) => (e) => {
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    whatsappService.submitContactForm(formData);
+  };
+
   return (
     <div style={styles.page}>
       <Header />
@@ -249,25 +268,25 @@ export default function ContactUs() {
 
           <div style={styles.panel}>
             <h2 style={styles.sectionTitle}>Send a Message</h2>
-            <form style={styles.form}>
+            <form style={styles.form} onSubmit={handleSubmit}>
               <div style={styles.row}>
                 <div style={styles.field}>
                   <label style={styles.label}>Full Name</label>
-                  <input style={styles.input} type="text" placeholder="Your name" required />
+                  <input style={styles.input} type="text" placeholder="Your name" required value={formData.fullName} onChange={handleChange("fullName")} />
                 </div>
                 <div style={styles.field}>
                   <label style={styles.label}>Email</label>
-                  <input style={styles.input} type="email" placeholder="you@email.com" required />
+                  <input style={styles.input} type="email" placeholder="you@email.com" required value={formData.email} onChange={handleChange("email")} />
                 </div>
               </div>
               <div style={styles.row}>
                 <div style={styles.field}>
                   <label style={styles.label}>Phone</label>
-                  <input style={styles.input} type="tel" placeholder="+91 90000 00000" />
+                  <input style={styles.input} type="tel" placeholder="+91 90000 00000" value={formData.phone} onChange={handleChange("phone")} />
                 </div>
                 <div style={styles.field}>
                   <label style={styles.label}>Subject</label>
-                  <input style={styles.input} type="text" placeholder="Hiring, support, or other" />
+                  <input style={styles.input} type="text" placeholder="Hiring, support, or other" value={formData.subject} onChange={handleChange("subject")} />
                 </div>
               </div>
               <div style={styles.field}>
@@ -276,6 +295,8 @@ export default function ContactUs() {
                   style={styles.textarea}
                   placeholder="Tell us how we can help"
                   required
+                  value={formData.message}
+                  onChange={handleChange("message")}
                 />
               </div>
               <button

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import Header from "../Component/Header.jsx";
 import Footer from "../Component/Footer.tsx";
+import { whatsappService } from "../services/whatsappService.js";
 
 const highlights = [
   {
@@ -293,8 +295,27 @@ const styles = {
 };
 
 export default function Employee() {
+  const [formData, setFormData] = useState({
+    companyName: "",
+    contactPerson: "",
+    email: "",
+    phone: "",
+    requirement: "",
+    positions: "",
+    details: "",
+  });
+
   const handleCall = (phone) => {
     window.location.href = `tel:${phone}`;
+  };
+
+  const handleChange = (field) => (e) => {
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    whatsappService.submitEmployerForm(formData);
   };
 
   return (
@@ -352,36 +373,38 @@ export default function Employee() {
             <p style={styles.sectionText}>
               Fill the form and our recruitment team will contact you shortly.
             </p>
-            <form style={styles.form}>
+            <form style={styles.form} onSubmit={handleSubmit}>
               <div style={styles.field}>
                 <label style={styles.label}>Company Name</label>
-                <input style={styles.input} type="text" placeholder="Your company" required />
+                <input style={styles.input} type="text" placeholder="Your company" required value={formData.companyName} onChange={handleChange("companyName")} />
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Contact Person</label>
-                <input style={styles.input} type="text" placeholder="Your full name" required />
+                <input style={styles.input} type="text" placeholder="Your full name" required value={formData.contactPerson} onChange={handleChange("contactPerson")} />
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Email</label>
-                <input style={styles.input} type="email" placeholder="you@company.com" required />
+                <input style={styles.input} type="email" placeholder="you@company.com" required value={formData.email} onChange={handleChange("email")} />
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Phone</label>
-                <input style={styles.input} type="tel" placeholder="+91 90000 00000" required />
+                <input style={styles.input} type="tel" placeholder="+91 90000 00000" required value={formData.phone} onChange={handleChange("phone")} />
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Role / Requirement</label>
-                <input style={styles.input} type="text" placeholder="Role, experience, location" required />
+                <input style={styles.input} type="text" placeholder="Role, experience, location" required value={formData.requirement} onChange={handleChange("requirement")} />
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Number of Positions</label>
-                <input style={styles.input} type="number" min="1" placeholder="e.g. 3" required />
+                <input style={styles.input} type="number" min="1" placeholder="e.g. 3" required value={formData.positions} onChange={handleChange("positions")} />
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Additional Details</label>
                 <textarea
                   style={styles.textarea}
                   placeholder="Skills, budget, joining timeline, interview process"
+                  value={formData.details}
+                  onChange={handleChange("details")}
                 />
               </div>
               <button
