@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { jobService } from "../../services/jobService.js";
+import { AdminTableSkeleton } from "../../Component/AdminSkeletons.jsx";
 
 const STATUS_COLORS = {
   'Applied':    { bg: "#e0f2fe", color: "#0369a1" },
@@ -85,6 +86,20 @@ export default function AdminCandidates() {
   const handleFilterJob = (v) => { setFilterJob(v); setPage(1); };
   const handleFilterStatus = (v) => { setFilterStatus(v); setPage(1); };
   const handleFilterAi = (v) => { setFilterAi(v); setPage(1); };
+
+  if (loading) {
+    return (
+      <div style={{ padding: "32px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: 700, color: "#111827" }}>Portal Candidate: - Candidate applying job on our portal</h1>
+            <p style={{ margin: 0, color: "#6b7280", fontSize: "13px" }}>Loading...</p>
+          </div>
+        </div>
+        <AdminTableSkeleton rows={7} columns={11} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "32px" }}>

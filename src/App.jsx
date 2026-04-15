@@ -29,6 +29,7 @@ import AdminEmailAutomation from "./pages/admin/AdminEmailAutomation.jsx";
 import AdminManagement from "./pages/admin/AdminManagement.jsx";
 
 import AdminHRReports from "./pages/admin/AdminHRReports.jsx";
+import SuperAdminOnly from "./Component/SuperAdminOnly.jsx";
 
 function HomePage() {
   return (
@@ -77,8 +78,22 @@ export default function App() {
         <Route path="client-jobs" element={<AdminClientJobs />} />
         <Route path="client-jobs/:jobCode" element={<AdminClientJobDetail />} />
         <Route path="client-jobs/:jobCode/email" element={<AdminEmailAutomation />} />
-        <Route path="admin-management" element={<AdminManagement />} />
-        <Route path="hr-reports" element={<AdminHRReports />} />
+        <Route
+          path="admin-management"
+          element={
+            <SuperAdminOnly pageName="Admin Management">
+              <AdminManagement />
+            </SuperAdminOnly>
+          }
+        />
+        <Route
+          path="hr-reports"
+          element={
+            <SuperAdminOnly pageName="HR Reports">
+              <AdminHRReports />
+            </SuperAdminOnly>
+          }
+        />
       </Route>
     </Routes>
   );

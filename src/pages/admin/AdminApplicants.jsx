@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
-import Loader from '../../Component/Loader';
+import { AdminTableSkeleton } from '../../Component/AdminSkeletons.jsx';
 import {
   FiSearch, FiFilter, FiX, FiUser, FiMail, FiPhone, FiMapPin,
   FiBriefcase, FiBookOpen, FiTag, FiAlignLeft, FiCalendar,
@@ -535,7 +535,7 @@ export default function AdminApplicants() {
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 16px rgba(11,47,91,0.05)' }}>
         {loading ? (
-          <Loader text="Loading applicants..." />
+          <AdminTableSkeleton rows={8} columns={11} />
         ) : paged.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
             <FiDatabase size={36} style={{ marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { jobService } from "../../services/jobService.js";
 import { supabase } from "../../services/supabaseClient.js";
+import { AdminDashboardSkeleton } from "../../Component/AdminSkeletons.jsx";
 
 function StatCard({ icon, label, value, color, bg }) {
   return (
@@ -117,6 +118,20 @@ export default function AdminDashboard() {
 
   // Recent 5 candidates
   const recent = candidates.slice(-5).reverse();
+
+  if (loading) {
+    return (
+      <div style={{ padding: "32px", maxWidth: "1250px" }}>
+        <div style={{ marginBottom: "28px" }}>
+          <h1 style={{ margin: "0 0 4px", fontSize: "26px", fontWeight: 700, color: "#111827" }}>
+            ðŸ‘‹ Welcome back, {adminId}
+          </h1>
+          <p style={{ margin: 0, color: "#6b7280", fontSize: "14px" }}>{today}</p>
+        </div>
+        <AdminDashboardSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "32px", maxWidth: "1250px" }}>

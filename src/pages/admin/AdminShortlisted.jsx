@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { jobService } from '../../services/jobService';
 import { FiCheckCircle, FiSearch, FiRefreshCw, FiExternalLink, FiX, FiCalendar, FiBriefcase, FiTrash2, FiLoader } from 'react-icons/fi';
+import { AdminTableSkeleton } from '../../Component/AdminSkeletons.jsx';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -116,10 +117,7 @@ export default function AdminShortlisted() {
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 16px rgba(11,47,91,0.05)' }}>
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
-            <FiRefreshCw size={28} style={{ animation: 'spin 1s linear infinite', marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
-            <div style={{ fontSize: '14px' }}>Loading tagged candidates...</div>
-          </div>
+          <AdminTableSkeleton rows={6} columns={7} />
         ) : filtered.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
             <FiCheckCircle size={36} style={{ marginBottom: '12px', display: 'block', margin: '0 auto 12px', color: '#cbd5e1' }} />

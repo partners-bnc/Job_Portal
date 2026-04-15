@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { jobService } from "../../services/jobService.js";
+import { AdminTableSkeleton } from "../../Component/AdminSkeletons.jsx";
 
 const EMPTY_JOB = {
   title: "", location: "", type: "", experience: "",
@@ -158,6 +159,20 @@ export default function AdminJobListings() {
     j.location?.toLowerCase().includes(search.toLowerCase()) ||
     j.type?.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div style={{ padding: "32px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: 700, color: "#111827" }}>Portal Job Listing</h1>
+            <p style={{ margin: 0, color: "#6b7280", fontSize: "13px" }}>Loading...</p>
+          </div>
+        </div>
+        <AdminTableSkeleton rows={6} columns={8} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "32px" }}>
