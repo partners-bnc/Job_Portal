@@ -36,16 +36,6 @@ IMPORTANT RULES:
 - If you are not confident about a field, return null for that field`;
 }
 
-function json(status, body) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    },
-  });
-}
-
 function getConfiguredKeys() {
   return [
     process.env.GROQ_API_KEY_1,
@@ -149,36 +139,39 @@ async function parseWithRotation(prompt, keys, rotationIndex = 0) {
   throw lastError || new Error('Resume parsing failed');
 }
 
-export default async function handler(request) {
-  if (request.method !== 'POST') {
-    return json(405, { error: 'Method not allowed' });
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'application/json');
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const keys = getConfiguredKeys();
   if (!keys.length) {
-    return json(500, { error: 'Groq API keys are not configured on the server.' });
+    return res.status(500).json({ error: 'Groq API keys are not configured on the server.' });
   }
 
   try {
-    const body = await request.json();
-    const resumeText = String(body?.resumeText || '').trim();
-    const extended = body?.extended !== false;
-    const rotationIndex = Number(body?.rotationIndex || 0);
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const resumeText = String(body.resumeText || '').trim();
+    const extended = body.extended !== false;
+    const rotationIndex = Number(body.rotationIndex || 0);
 
     if (resumeText.length < 20) {
-      return json(400, { error: 'Resume text is too short to parse.' });
+      return res.status(400).json({ error: 'Resume text is too short to parse.' });
     }
 
     const prompt = getResumePrompt(resumeText, extended);
     const { parsed, keyIndex } = await parseWithRotation(prompt, keys, rotationIndex);
 
-    return json(200, {
+    return res.status(200).json({
       success: true,
       parsed,
       keyIndex,
     });
   } catch (error) {
-    return json(error?.status || 500, {
+    return res.status(error?.status || 500).json({
       error: error?.message || 'Resume parsing failed.',
     });
   }
