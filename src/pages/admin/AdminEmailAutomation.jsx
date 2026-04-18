@@ -23,14 +23,10 @@ export default function AdminEmailAutomation() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [jobs, allShortlists, allApplicants, hrs, clients] = await Promise.all([
-          jobService.fetchClientJobs(),
-          jobService.getShortlistedCandidates(),
-          jobService.getDatabaseCandidates(),
-          jobService.fetchHRs(),
-          jobService.fetchClients()
+        const [foundJob, hrs] = await Promise.all([
+          jobService.fetchClientJobByCode(jobCode),
+          jobService.fetchHRs()
         ]);
-        const foundJob = jobs.find(j => j.jobCode === jobCode);
         setJob(foundJob || null);
         if (foundJob) {
           // Look up manager email from HR list
@@ -45,13 +41,16 @@ export default function AdminEmailAutomation() {
           if (foundJob.reportingClientEmail) {
             setClientEmail(foundJob.reportingClientEmail);
           }
-          // Enrich shortlisted candidates
-          const matches = allShortlists.filter(s => s.jobCode === jobCode);
-          const enriched = matches.map(m => {
-            const fullData = allApplicants.find(a => a.applicantId === m.applicantId);
-            return { ...m, ...fullData };
-          });
+          const matches = await jobService.fetchShortlistedCandidatesByJob(jobCode);
+          const applicants = await jobService.fetchApplicantsByIds(matches.map((item) => item.applicantId));
+          const applicantMap = new Map(applicants.map((applicant) => [applicant.applicantId, applicant]));
+          const enriched = matches.map((match) => ({
+            ...match,
+            ...(applicantMap.get(match.applicantId) || {})
+          }));
           setCandidates(enriched);
+        } else {
+          setCandidates([]);
         }
       } catch (err) {
         console.error('Failed to load email automation data', err);

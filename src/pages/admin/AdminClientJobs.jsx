@@ -1,30 +1,32 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
-import { FiRefreshCw, FiBriefcase, FiEdit2, FiList, FiPlusSquare, FiSearch, FiEye } from 'react-icons/fi';
+import {
+  FiBriefcase,
+  FiChevronLeft,
+  FiChevronRight,
+  FiEdit2,
+  FiEye,
+  FiList,
+  FiPlusSquare,
+  FiRefreshCw,
+  FiSearch
+} from 'react-icons/fi';
+
+const PAGE_SIZE = 20;
 
 export default function AdminClientJobs() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [jobs, setJobs] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [hrs, setHrs] = useState([]);
-  
-  // 'view' | 'form'
-  const [activeTab, setActiveTab] = useState('view');
-  // null = Add, object = Edit
-  const [editingJob, setEditingJob] = useState(null);
 
-  // Form State
   const initialForm = {
     jobCode: 'JPC-',
     jobTitle: '',
+    jobType: 'Full Time',
+    jobMode: 'Onsite',
     businessUnit: '',
-    clientId: '', // Will hold the selected Client's ID
-    clientName: '', // Will hold the selected Client's Name
+    clientId: '',
+    clientName: '',
     location: '',
     state: '',
     country: 'India',
@@ -39,89 +41,71 @@ export default function AdminClientJobs() {
     reportingClientEmail: '',
     reportingClientContact: ''
   };
+
+  const [jobs, setJobs] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [hrs, setHrs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [formLoading, setFormLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const [activeTab, setActiveTab] = useState('view');
+  const [editingJob, setEditingJob] = useState(null);
   const [formData, setFormData] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchJobs = async (nextPage = page, nextSearch = searchTerm) => {
     setLoading(true);
     setError('');
     try {
-      const [jobsData, clientsData, hrsData] = await Promise.all([
-        jobService.fetchClientJobs(),
-        jobService.fetchClients(),
-        jobService.fetchHRs()
-      ]);
-      setJobs(jobsData || []);
-      setClients(clientsData || []);
-      setHrs(hrsData || []);
-
-      // Auto-suggest next JPC code
-      if (jobsData && jobsData.length > 0) {
-        const jpcNumbers = jobsData
-          .map(j => {
-            const match = j.jobCode?.match(/JPC-(\d+)/);
-            return match ? parseInt(match[1]) : 0;
-          })
-          .filter(n => !isNaN(n));
-        
-        const nextNum = jpcNumbers.length > 0 ? Math.max(...jpcNumbers) + 1 : 1;
-        const suggestedCode = `JPC-${String(nextNum).padStart(3, '0')}`;
-        
-        setFormData(prev => ({
-          ...prev,
-          jobCode: suggestedCode
-        }));
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          jobCode: 'JPC-001'
-        }));
-      }
+      const result = await jobService.fetchClientJobsPage({
+        page: nextPage,
+        pageSize: PAGE_SIZE,
+        search: nextSearch
+      });
+      setJobs(result.data || []);
+      setTotalCount(result.total || 0);
     } catch (err) {
-      setError('Failed to load data.');
+      setError('Failed to load jobs.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  // Handle auto-edit job from route state
-  useEffect(() => {
-    if (jobs.length > 0 && location.state?.editJobCode) {
-      const jobToEdit = jobs.find(j => j.jobCode === location.state.editJobCode);
-      if (jobToEdit) {
-        handleEditClick(jobToEdit);
-        // clear it from state so it doesn't reopen if they refresh
-        navigate(location.pathname, { replace: true, state: {} });
+    const timer = window.setTimeout(() => {
+      if (activeTab === 'view') {
+        fetchJobs(page, searchTerm);
       }
-    }
-  }, [jobs, location.state, navigate, location.pathname]);
+    }, 250);
 
-  // Filter jobs based on search term
-  const filteredJobs = useMemo(() => {
-    if (!searchTerm.trim()) return jobs;
-    const term = searchTerm.toLowerCase();
-    return jobs.filter(j => 
-      j.jobCode?.toLowerCase().includes(term) ||
-      j.jobTitle?.toLowerCase().includes(term) ||
-      j.clientName?.toLowerCase().includes(term) ||
-      j.recruitmentManager?.toLowerCase().includes(term) ||
-      j.location?.toLowerCase().includes(term)
-    );
-  }, [jobs, searchTerm]);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, page, searchTerm]);
 
-  const handleEditClick = (job) => {
-    setEditingJob(job);
-    // Parse assignedTo from comma-separated string to array
+  const ensureFormDependencies = async () => {
+    const [clientsData, hrsData] = await Promise.all([
+      clients.length ? Promise.resolve(clients) : jobService.fetchClients(),
+      hrs.length ? Promise.resolve(hrs) : jobService.fetchHRs()
+    ]);
+    setClients(clientsData || []);
+    setHrs(hrsData || []);
+    return { clientsData: clientsData || [], hrsData: hrsData || [] };
+  };
+
+  const applyJobToForm = (job) => {
     const assignedArr = job.assignedTo
-      ? job.assignedTo.split(',').map(s => s.trim()).filter(Boolean)
+      ? job.assignedTo.split(',').map((item) => item.trim()).filter(Boolean)
       : [];
+
+    setEditingJob(job);
     setFormData({
       jobCode: job.jobCode || '',
       jobTitle: job.jobTitle || '',
+      jobType: job.jobType || 'Full Time',
+      jobMode: job.jobMode || 'Onsite',
       businessUnit: job.businessUnit || '',
       clientId: job.clientId || '',
       clientName: job.clientName || '',
@@ -142,42 +126,70 @@ export default function AdminClientJobs() {
     setActiveTab('form');
   };
 
-  const handleAddClick = () => {
-    setEditingJob(null);
-    
-    // Auto-calculate next code again in case something was added
-    const jpcNumbers = jobs
-      .map(j => {
-        const match = j.jobCode?.match(/JPC-(\d+)/);
-        return match ? parseInt(match[1]) : 0;
-      })
-      .filter(n => !isNaN(n));
-    const nextNum = jpcNumbers.length > 0 ? Math.max(...jpcNumbers) + 1 : 1;
-    const suggestedCode = `JPC-${String(nextNum).padStart(3, '0')}`;
+  const openEditJob = async (jobCode) => {
+    setFormLoading(true);
+    setError('');
+    try {
+      const [job] = await Promise.all([
+        jobService.fetchClientJobByCode(jobCode),
+        ensureFormDependencies()
+      ]);
 
-    setFormData({
-      ...initialForm,
-      jobCode: suggestedCode
-    });
-    setActiveTab('form');
+      if (!job) {
+        setError('Job details could not be loaded.');
+        return;
+      }
+
+      applyJobToForm(job);
+    } catch (err) {
+      setError('Job details could not be loaded.');
+    } finally {
+      setFormLoading(false);
+    }
   };
+
+  const handleAddClick = async () => {
+    setFormLoading(true);
+    setError('');
+    try {
+      await ensureFormDependencies();
+      const nextJobCode = await jobService.fetchNextClientJobCode();
+      setEditingJob(null);
+      setFormData({
+        ...initialForm,
+        jobCode: nextJobCode
+      });
+      setActiveTab('form');
+    } catch (err) {
+      setError('Unable to prepare the job form.');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (location.state?.editJobCode) {
+      openEditJob(location.state.editJobCode);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     if (name === 'clientSelection') {
-      const selectedClient = clients.find(c => c.clientId === value);
+      const selectedClient = clients.find((client) => client.clientId === value);
       if (selectedClient) {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           clientId: selectedClient.clientId,
           clientName: selectedClient.clientName,
-          // Reset reporting client when client changes
           reportingClientName: '',
           reportingClientEmail: '',
           reportingClientContact: ''
         }));
       } else {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           clientId: '',
           clientName: '',
@@ -186,40 +198,30 @@ export default function AdminClientJobs() {
           reportingClientContact: ''
         }));
       }
-    } else if (name === 'reportingClientSelection') {
-      const selectedClient = clients.find(c => c.clientId === formData.clientId);
-      if (selectedClient && selectedClient.reportingContacts) {
-        const contact = selectedClient.reportingContacts.find(rc => rc.name === value);
-        if (contact) {
-          setFormData(prev => ({
-            ...prev,
-            reportingClientName: contact.name,
-            reportingClientEmail: contact.email,
-            reportingClientContact: contact.contact
-          }));
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            reportingClientName: '',
-            reportingClientEmail: '',
-            reportingClientContact: ''
-          }));
-        }
-      }
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      return;
     }
+
+    if (name === 'reportingClientSelection') {
+      const selectedClient = clients.find((client) => client.clientId === formData.clientId);
+      const selectedContact = selectedClient?.reportingContacts?.find((contact) => contact.name === value);
+      setFormData((prev) => ({
+        ...prev,
+        reportingClientName: selectedContact?.name || '',
+        reportingClientEmail: selectedContact?.email || '',
+        reportingClientContact: selectedContact?.contact || ''
+      }));
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Toggle an HR in the assignedTo array
   const toggleAssignedHR = (hrName) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const current = prev.assignedTo || [];
-      if (current.includes(hrName)) {
-        return { ...prev, assignedTo: current.filter(h => h !== hrName) };
-      } else {
-        return { ...prev, assignedTo: [...current, hrName] };
-      }
+      return current.includes(hrName)
+        ? { ...prev, assignedTo: current.filter((item) => item !== hrName) }
+        : { ...prev, assignedTo: [...current, hrName] };
     });
   };
 
@@ -230,45 +232,41 @@ export default function AdminClientJobs() {
       return;
     }
 
-    // Frontend Duplicate Check
     if (!editingJob) {
-      const isDuplicate = jobs.some(j => j.jobCode?.toLowerCase() === formData.jobCode.toLowerCase());
-      if (isDuplicate) {
+      const existingJob = await jobService.fetchClientJobByCode(formData.jobCode);
+      if (existingJob) {
         setError(`Job Code "${formData.jobCode}" already exists. Please use a unique code.`);
         return;
       }
     }
+
     if (!formData.clientId) {
-      setError("Please select a Client.");
+      setError('Please select a client.');
       return;
     }
 
     setIsSubmitting(true);
     setError('');
-    
+
     try {
       const payload = {
         ...formData,
-        // Join array to comma-separated string for storage
         assignedTo: Array.isArray(formData.assignedTo) ? formData.assignedTo.join(', ') : formData.assignedTo,
         createdBy: sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin',
         modifiedBy: sessionStorage.getItem('bnc_admin_name') || sessionStorage.getItem('bnc_admin_id') || 'Admin'
       };
-      
-      let res;
-      if (editingJob) {
-        res = await jobService.updateClientJob(payload);
-      } else {
-        res = await jobService.addClientJob(payload);
-      }
 
-      if (res && res.success) {
+      const result = editingJob
+        ? await jobService.updateClientJob(payload)
+        : await jobService.addClientJob(payload);
+
+      if (result?.success) {
         setFormData(initialForm);
         setEditingJob(null);
         setActiveTab('view');
-        fetchData(); // Refresh list
+        fetchJobs(1, searchTerm);
       } else {
-        setError(res?.error || 'Failed to save job');
+        setError(result?.error || 'Failed to save job');
       }
     } catch (err) {
       setError('An error occurred while saving.');
@@ -278,18 +276,21 @@ export default function AdminClientJobs() {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) return '-';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '—';
+    if (Number.isNaN(date.getTime())) return '-';
     return date.toLocaleString('en-IN', {
-      day: '2-digit', month: '2-digit', year: 'numeric'
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
   };
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
   return (
     <div style={{ padding: '28px 30px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{
             width: '46px', height: '46px', borderRadius: '14px',
@@ -300,65 +301,58 @@ export default function AdminClientJobs() {
           </div>
           <div>
             <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Client JPC</h1>
-            <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>Post and manage JPC database for onboarding clients</p>
+            <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>
+              {activeTab === 'view' ? `${totalCount} total jobs` : 'Manage JPC details'}
+            </p>
           </div>
         </div>
-        
-        {/* Top Actions */}
-        <div style={{ display: 'flex', gap: '12px' }}>
-           <button onClick={fetchData} disabled={loading} style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '12px',
-              background: '#fff', color: '#475569', cursor: 'pointer', fontSize: '14px', fontWeight: 700,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.02)', transition: 'all 0.2s'
-            }}>
-              <FiRefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
-            </button>
-        </div>
+
+        <button onClick={() => fetchJobs(page, searchTerm)} disabled={loading} style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '12px',
+          background: '#fff', color: '#475569', cursor: 'pointer', fontSize: '14px', fontWeight: 700,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+        }}>
+          <FiRefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
+        </button>
       </div>
 
-      {/* Controls Row: Switch Mode & Search */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: '1fr 1fr', 
-        alignItems: 'center', 
-        gap: '24px', 
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        alignItems: 'center',
+        gap: '24px',
         marginBottom: '32px'
       }}>
-        {/* Left Area: Switch Mode Toggle */}
         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-          <div style={{ 
-            background: '#f1f5f9', 
-            padding: '6px', 
-            borderRadius: '16px', 
-            display: 'flex', 
+          <div style={{
+            background: '#f1f5f9',
+            padding: '6px',
+            borderRadius: '16px',
+            display: 'flex',
             gap: '4px',
             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
           }}>
-            <button 
+            <button
               onClick={() => setActiveTab('view')}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '10px 24px', borderRadius: '10px', border: 'none',
-                background: activeTab === 'view' ? '#0f766e' : 'transparent', 
-                color: activeTab === 'view' ? '#fff' : '#64748b', 
-                cursor: 'pointer', fontSize: '14px', fontWeight: 800,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: activeTab === 'view' ? '0 4px 12px rgba(15, 118, 110, 0.2)' : 'none'
+                background: activeTab === 'view' ? '#0f766e' : 'transparent',
+                color: activeTab === 'view' ? '#fff' : '#64748b',
+                cursor: 'pointer', fontSize: '14px', fontWeight: 800
               }}
             >
               <FiList size={18} /> View Jobs
             </button>
-            <button 
+            <button
               onClick={handleAddClick}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '10px 24px', borderRadius: '10px', border: 'none',
-                background: activeTab === 'form' ? '#0f766e' : 'transparent', 
-                color: activeTab === 'form' ? '#fff' : '#64748b', 
-                cursor: 'pointer', fontSize: '14px', fontWeight: 800,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: activeTab === 'form' ? '0 4px 12px rgba(15, 118, 110, 0.2)' : 'none'
+                background: activeTab === 'form' ? '#0f766e' : 'transparent',
+                color: activeTab === 'form' ? '#fff' : '#64748b',
+                cursor: 'pointer', fontSize: '14px', fontWeight: 800
               }}
             >
               <FiPlusSquare size={18} /> {editingJob ? 'Edit Job' : 'Post Job'}
@@ -366,16 +360,18 @@ export default function AdminClientJobs() {
           </div>
         </div>
 
-        {/* Right Area: Search Bar */}
         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
           {activeTab === 'view' ? (
             <div style={{ position: 'relative', width: '100%', maxWidth: '500px' }}>
               <FiSearch style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
-              <input 
-                type="text" 
-                placeholder="Search by Job Code, Title, Client, Location..." 
+              <input
+                type="text"
+                placeholder="Search by Job Code, Title, Client, Location..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
                 style={{
                   width: '100%',
                   padding: '12px 14px 12px 48px',
@@ -384,11 +380,8 @@ export default function AdminClientJobs() {
                   fontSize: '14px',
                   background: '#fff',
                   outline: 'none',
-                  transition: 'all 0.2s',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
                 }}
-                onFocus={(e) => e.target.style.borderColor = '#0f766e'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
               />
             </div>
           ) : <div />}
@@ -396,36 +389,21 @@ export default function AdminClientJobs() {
       </div>
 
       {error && (
-        <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', color: '#dc2626', fontSize: '13px', marginBottom: '20px', maxWidth: '800px', margin: '0 auto 20px' }}>
+        <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', color: '#dc2626', fontSize: '13px', marginBottom: '20px', maxWidth: '800px' }}>
           {error}
         </div>
       )}
 
-      {/* View Jobs Tab */}
       {activeTab === 'view' && (
         <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.04)' }}>
-          <style>{`
-            .custom-scrollbar::-webkit-scrollbar { height: 6px; }
-            .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; }
-            .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-            .clickable-row { cursor: pointer; transition: background 0.15s; }
-            .clickable-row:hover { background: #f9fafb; }
-          `}</style>
-          <div className="custom-scrollbar" style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1400px' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>Actions</th>
-                  {[
-                    'Job Code', 'Job Title', 'Client', 'Location', 'Experience', 'Pay Rate', 
-                    'Manager', 'Status', 'Created On'
-                  ].map(h => (
-                    <th key={h} style={{ 
-                      padding: '16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, 
-                      color: '#475569', whiteSpace: 'nowrap'
-                    }}>
-                      {h}
+                  {['Job Code', 'Job Title', 'Job Type', 'Job Mode', 'Client', 'Location', 'Experience', 'Pay Rate', 'Manager', 'Status', 'Created On'].map((header) => (
+                    <th key={header} style={{ padding: '16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>
+                      {header}
                     </th>
                   ))}
                 </tr>
@@ -433,251 +411,282 @@ export default function AdminClientJobs() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} style={{ padding: '80px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={12} style={{ padding: '80px', textAlign: 'center', color: '#94a3b8' }}>
                       <FiRefreshCw size={32} style={{ animation: 'spin 1s linear infinite', marginBottom: '16px', display: 'block', margin: '0 auto 16px' }} />
-                      <span style={{ fontSize: '15px', fontWeight: 600 }}>Syncing Client JPC...</span>
+                      <span style={{ fontSize: '15px', fontWeight: 600 }}>Syncing client JPC...</span>
                     </td>
                   </tr>
-                ) : filteredJobs.length === 0 ? (
+                ) : jobs.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ padding: '80px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
-                      {searchTerm ? 'No matches found.' : 'No job postings found. Switch to "Post Job" to create one!'}
+                    <td colSpan={12} style={{ padding: '80px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+                      {searchTerm ? 'No matches found.' : 'No job postings found. Switch to "Post Job" to create one.'}
                     </td>
                   </tr>
-                ) : filteredJobs.map((j, i) => (
-                  <tr key={j.jobCode || i} className="clickable-row" style={{ borderBottom: '1px solid #f1f5f9' }}
-                      onClick={() => navigate(`/admin/client-jobs/${j.jobCode}`)}>
+                ) : jobs.map((job, index) => (
+                  <tr key={job.jobCode || index} style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }} onClick={() => navigate(`/admin/client-jobs/${job.jobCode}`)}>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <button onClick={(e) => { e.stopPropagation(); handleEditClick(j); }} style={{
-                          background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '4px 10px', 
+                        <button onClick={(e) => { e.stopPropagation(); openEditJob(job.jobCode); }} style={{
+                          background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '4px 10px',
                           borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                          fontSize: '11px', fontWeight: 600, transition: 'all 0.2s'
+                          fontSize: '11px', fontWeight: 600
                         }} title="Edit Job">
                           <FiEdit2 size={12} /> Edit
                         </button>
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f766e', fontWeight: 800 }}>{j.jobCode}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{j.jobTitle}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569', fontWeight: 600 }}>{j.clientName}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f766e', fontWeight: 800 }}>{job.jobCode}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{job.jobTitle}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{job.jobType || '-'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{job.jobMode || '-'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569', fontWeight: 600 }}>{job.clientName}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>
-                      {j.location}{j.state ? `, ${j.state}` : ''}{j.country ? `, ${j.country}` : ''}
+                      {job.location}{job.state ? `, ${job.state}` : ''}{job.country ? `, ${job.country}` : ''}
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{j.experience || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{j.payRate || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{j.recruitmentManager || '—'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{job.experience || '-'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{job.payRate || '-'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#475569' }}>{job.recruitmentManager || '-'}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{
                         padding: '6px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 800,
-                        background: j.status?.toLowerCase() === 'active' ? '#ecfdf5' : '#fff1f2',
-                        color: j.status?.toLowerCase() === 'active' ? '#059669' : '#e11d48',
-                        border: `1px solid ${j.status?.toLowerCase() === 'active' ? '#a7f3d0' : '#fecdd3'}`,
-                      }}>{j.status?.toUpperCase() || 'ACTIVE'}</span>
+                        background: job.status?.toLowerCase() === 'active' ? '#ecfdf5' : '#fff1f2',
+                        color: job.status?.toLowerCase() === 'active' ? '#059669' : '#e11d48',
+                        border: `1px solid ${job.status?.toLowerCase() === 'active' ? '#a7f3d0' : '#fecdd3'}`
+                      }}>{job.status?.toUpperCase() || 'ACTIVE'}</span>
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', whiteSpace: 'nowrap' }}>{formatDate(j.createdOn)}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', whiteSpace: 'nowrap' }}>{formatDate(job.createdOn)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {totalPages > 1 && !loading && (
+            <div style={{
+              padding: '14px 18px',
+              borderTop: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount}
+              </span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} style={{
+                  width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff',
+                  cursor: page === 1 ? 'not-allowed' : 'pointer', color: page === 1 ? '#cbd5e1' : '#475569',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}><FiChevronLeft size={14} /></button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, offset) => {
+                  const start = Math.max(1, Math.min(totalPages - 4, page - 2));
+                  const pageNumber = start + offset;
+                  return (
+                    <button key={pageNumber} onClick={() => setPage(pageNumber)} style={{
+                      width: '32px', height: '32px', borderRadius: '8px', border: 'none',
+                      background: page === pageNumber ? '#0f766e' : '#f8fafc',
+                      color: page === pageNumber ? '#fff' : '#475569',
+                      fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>{pageNumber}</button>
+                  );
+                })}
+                <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} style={{
+                  width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff',
+                  cursor: page === totalPages ? 'not-allowed' : 'pointer', color: page === totalPages ? '#cbd5e1' : '#475569',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}><FiChevronRight size={14} /></button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Add / Edit Form Tab */}
       {activeTab === 'form' && (
         <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
-          <div style={{ borderBottom: '1px solid #f1f5f9', marginBottom: '32px', paddingBottom: '16px' }}>
-            <h2 style={{ margin: '0', fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
-              {editingJob ? `Update JPC: ${formData.jobCode}` : 'Post New Client JPC'}
-            </h2>
-            <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>
-              Fill out the required information perfectly.
-            </p>
-          </div>
-          
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-            
-            {/* Row 1 */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Code *</label>
-              <input required name="jobCode" value={formData.jobCode} onChange={handleChange} disabled={!!editingJob}
-                placeholder="e.g. JPC-113" 
-                style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: editingJob ? '#f8fafc' : '#fff', outline: 'none' }} />
-              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#94a3b8' }}>
-                {editingJob ? 'ID cannot be changed.' : 'Must start with JPC-'}
-              </p>
+          {formLoading ? (
+            <div style={{ padding: '80px', textAlign: 'center', color: '#94a3b8' }}>
+              <FiRefreshCw size={28} style={{ animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
+              <div style={{ fontSize: '15px', fontWeight: 600 }}>Loading JPC details...</div>
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Title *</label>
-              <input required name="jobTitle" value={formData.jobTitle} onChange={handleChange} placeholder="e.g. Senior Software Engineer" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-
-            {/* Row 2 */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Client Database Reference *</label>
-              <select 
-                name="clientSelection" 
-                value={formData.clientId} 
-                onChange={handleChange} 
-                required
-                style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}
-              >
-                <option value="">-- Select an onboarded Client --</option>
-                {clients.map(c => (
-                  <option key={c.clientId} value={c.clientId}>{c.clientName} ({c.clientId})</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Reporting Client */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Reporting Client</label>
-              <select 
-                name="reportingClientSelection" 
-                value={formData.reportingClientName} 
-                onChange={handleChange} 
-                disabled={!formData.clientId}
-                style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: formData.clientId ? '#fff' : '#f8fafc', outline: 'none' }}
-              >
-                <option value="">-- Select Reporting Contact --</option>
-                {formData.clientId && clients.find(c => c.clientId === formData.clientId)?.reportingContacts?.map((rc, idx) => (
-                  <option key={idx} value={rc.name}>{rc.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Reporting Contact Info Display */}
-            {formData.reportingClientName && (
-              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', background: '#eff6ff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-                <div style={{ flex: 1, fontSize: '13px', color: '#1e3a8a' }}><strong>Email:</strong> {formData.reportingClientEmail}</div>
-                <div style={{ flex: 1, fontSize: '13px', color: '#1e3a8a' }}><strong>Phone:</strong> {formData.reportingClientContact}</div>
+          ) : (
+            <>
+              <div style={{ borderBottom: '1px solid #f1f5f9', marginBottom: '32px', paddingBottom: '16px' }}>
+                <h2 style={{ margin: '0', fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
+                  {editingJob ? `Update JPC: ${formData.jobCode}` : 'Post New Client JPC'}
+                </h2>
+                <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>
+                  Fill out the required information.
+                </p>
               </div>
-            )}
 
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Business Unit</label>
-              <input type="text" name="businessUnit" value={formData.businessUnit} onChange={handleChange} placeholder="Enter business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
+              <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Code *</label>
+                  <input required name="jobCode" value={formData.jobCode} onChange={handleChange} disabled={!!editingJob} placeholder="e.g. JPC-113" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: editingJob ? '#f8fafc' : '#fff', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Title *</label>
+                  <input required name="jobTitle" value={formData.jobTitle} onChange={handleChange} placeholder="e.g. Senior Software Engineer" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                </div>
 
-            {/* Row 3 Location Details */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>City Location</label>
-              <input name="location" value={formData.location} onChange={handleChange} placeholder="e.g. Gurgaon" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>State</label>
-                <input name="state" value={formData.state} onChange={handleChange} placeholder="e.g. Haryana" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Country</label>
-                <input name="country" value={formData.country} onChange={handleChange} placeholder="India" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-              </div>
-            </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Type *</label>
+                  <select name="jobType" value={formData.jobType} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                    <option value="Full Time">Full Time</option>
+                    <option value="Part Time">Part Time</option>
+                    <option value="Contract">Contract</option>
+                  </select>
+                </div>
 
-            {/* Row 4 Metrics */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Pay Rate / Salary</label>
-              <input name="payRate" value={formData.payRate} onChange={handleChange} placeholder="e.g. ₹ 1000000-1200000" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Years of Experience</label>
-              <input list="expOptions" name="experience" value={formData.experience} onChange={handleChange} placeholder="e.g. 3 Years 6 Months" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-              <datalist id="expOptions">
-                <option value="0-2 Years" />
-                <option value="3-5 Years" />
-                <option value="5-8 Years" />
-                <option value="8-12 Years" />
-                <option value="12+ Years" />
-              </datalist>
-            </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Mode *</label>
+                  <select name="jobMode" value={formData.jobMode} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                    <option value="Onsite">Onsite</option>
+                    <option value="Remote">Remote</option>
+                    <option value="Hybrid">Hybrid</option>
+                  </select>
+                </div>
 
-            {/* Row 5 Management */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Recruitment Manager</label>
-              <select name="recruitmentManager" value={formData.recruitmentManager} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
-                <option value="">-- Select Manager --</option>
-                {hrs.map((hr, idx) => (
-                  <option key={idx} value={hr.hrName}>{hr.hrName}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Status</label>
-              <select name="status" value={formData.status} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
-                <option value="Active">Active</option>
-                <option value="Closed">Closed</option>
-                <option value="On Hold">On Hold</option>
-              </select>
-            </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Client Database Reference *</label>
+                  <select name="clientSelection" value={formData.clientId} onChange={handleChange} required style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                    <option value="">-- Select an onboarded Client --</option>
+                    {clients.map((client) => (
+                      <option key={client.clientId} value={client.clientId}>{client.clientName} ({client.clientId})</option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* Row 6 Assignment & Priority */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Assigned To (HR) — Select Multiple</label>
-              {/* Selected pills */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: formData.assignedTo?.length ? '10px' : '0' }}>
-                {(formData.assignedTo || []).map((hr, idx) => (
-                  <span key={idx} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0',
-                    padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 700
-                  }}>
-                    {hr}
-                    <span
-                      onClick={() => toggleAssignedHR(hr)}
-                      style={{ cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#dc2626', lineHeight: 1 }}
-                    >×</span>
-                  </span>
-                ))}
-              </div>
-              {/* Dropdown to add HR */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', boxSizing: 'border-box' }}>
-                {hrs.length === 0 ? (
-                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>No HRs available. Redeploy Apps Script.</span>
-                ) : hrs.map((hr, idx) => {
-                  const isSelected = (formData.assignedTo || []).includes(hr.hrName);
-                  return (
-                    <button
-                      type="button"
-                      key={idx}
-                      onClick={() => toggleAssignedHR(hr.hrName)}
-                      style={{
-                        padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
-                        border: isSelected ? '1.5px solid #059669' : '1.5px solid #cbd5e1',
-                        background: isSelected ? '#ecfdf5' : '#fff',
-                        color: isSelected ? '#059669' : '#475569',
-                        cursor: 'pointer', transition: 'all 0.2s'
-                      }}
-                    >
-                      {isSelected ? '✓ ' : ''}{hr.hrName}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Priority</label>
-              <select name="priority" value={formData.priority} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Reporting Client</label>
+                  <select name="reportingClientSelection" value={formData.reportingClientName} onChange={handleChange} disabled={!formData.clientId} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: formData.clientId ? '#fff' : '#f8fafc', outline: 'none' }}>
+                    <option value="">-- Select Reporting Contact --</option>
+                    {clients.find((client) => client.clientId === formData.clientId)?.reportingContacts?.map((contact, index) => (
+                      <option key={index} value={contact.name}>{contact.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* Row 7 Textarea */}
-            <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Description Detailed</label>
-              <textarea name="jobDescription" value={formData.jobDescription} onChange={handleChange} rows={6} placeholder="We're Hiring | Role Description..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }} />
-            </div>
+                {formData.reportingClientName && (
+                  <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', background: '#eff6ff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                    <div style={{ flex: 1, fontSize: '13px', color: '#1e3a8a' }}><strong>Email:</strong> {formData.reportingClientEmail}</div>
+                    <div style={{ flex: 1, fontSize: '13px', color: '#1e3a8a' }}><strong>Phone:</strong> {formData.reportingClientContact}</div>
+                  </div>
+                )}
 
-            <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', marginTop: '16px', background: '#f8fafc', padding: '24px', borderRadius: '16px' }}>
-              <button type="button" onClick={() => setActiveTab('view')} style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>Cancel</button>
-              <button type="submit" disabled={isSubmitting} style={{ flex: 1.5, padding: '14px', borderRadius: '12px', border: 'none', background: '#0f766e', color: '#fff', fontWeight: 800, cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(15, 118, 110, 0.2)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.9'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                {isSubmitting ? 'Saving JPC...' : (editingJob ? 'Update Client JPC' : 'Post JPC')}
-              </button>
-            </div>
-          </form>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Business Unit</label>
+                  <input type="text" name="businessUnit" value={formData.businessUnit} onChange={handleChange} placeholder="Enter business branch..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>City Location</label>
+                  <input name="location" value={formData.location} onChange={handleChange} placeholder="e.g. Gurgaon" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>State</label>
+                    <input name="state" value={formData.state} onChange={handleChange} placeholder="e.g. Haryana" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Country</label>
+                    <input name="country" value={formData.country} onChange={handleChange} placeholder="India" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Pay Rate / Salary</label>
+                  <input name="payRate" value={formData.payRate} onChange={handleChange} placeholder="e.g. Rs 1000000-1200000" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Years of Experience</label>
+                  <input name="experience" value={formData.experience} onChange={handleChange} placeholder="e.g. 3-5 Years" style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Recruitment Manager</label>
+                  <select name="recruitmentManager" value={formData.recruitmentManager} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                    <option value="">-- Select Manager --</option>
+                    {hrs.map((hr, index) => (
+                      <option key={index} value={hr.hrName}>{hr.hrName}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Status</label>
+                  <select name="status" value={formData.status} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                    <option value="Active">Active</option>
+                    <option value="Closed">Closed</option>
+                    <option value="On Hold">On Hold</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Assigned To (HR)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: formData.assignedTo?.length ? '10px' : '0' }}>
+                    {(formData.assignedTo || []).map((hrName, index) => (
+                      <span key={index} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0',
+                        padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 700
+                      }}>
+                        {hrName}
+                        <span onClick={() => toggleAssignedHR(hrName)} style={{ cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#dc2626', lineHeight: 1 }}>x</span>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', boxSizing: 'border-box' }}>
+                    {hrs.length === 0 ? (
+                      <span style={{ fontSize: '13px', color: '#94a3b8' }}>No HRs available.</span>
+                    ) : hrs.map((hr, index) => {
+                      const isSelected = (formData.assignedTo || []).includes(hr.hrName);
+                      return (
+                        <button
+                          type="button"
+                          key={index}
+                          onClick={() => toggleAssignedHR(hr.hrName)}
+                          style={{
+                            padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                            border: isSelected ? '1.5px solid #059669' : '1.5px solid #cbd5e1',
+                            background: isSelected ? '#ecfdf5' : '#fff',
+                            color: isSelected ? '#059669' : '#475569',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isSelected ? 'Selected ' : ''}{hr.hrName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Priority</label>
+                  <select name="priority" value={formData.priority} onChange={handleChange} style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', background: '#fff', outline: 'none' }}>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#475569', marginBottom: '8px' }}>Job Description Detailed</label>
+                  <textarea name="jobDescription" value={formData.jobDescription} onChange={handleChange} rows={6} placeholder="We're Hiring | Role Description..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', fontSize: '14px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }} />
+                </div>
+
+                <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', marginTop: '16px', background: '#f8fafc', padding: '24px', borderRadius: '16px' }}>
+                  <button type="button" onClick={() => setActiveTab('view')} style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
+                  <button type="submit" disabled={isSubmitting} style={{ flex: 1.5, padding: '14px', borderRadius: '12px', border: 'none', background: '#0f766e', color: '#fff', fontWeight: 800, cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(15, 118, 110, 0.2)' }}>
+                    {isSubmitting ? 'Saving JPC...' : (editingJob ? 'Update Client JPC' : 'Post JPC')}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
       )}
     </div>

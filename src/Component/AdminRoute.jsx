@@ -3,51 +3,68 @@ import { useState, useEffect } from "react";
 import { supabase } from "../services/supabaseClient.js";
 
 export default function AdminRoute({ children }) {
-  const [loading, setLoading] = useState(true);
-  const [isAuth, setIsAuth] = useState(false);
+  const hasStoredAdminSession = sessionStorage.getItem("bnc_admin_auth") === "true";
+  const [loading, setLoading] = useState(!hasStoredAdminSession);
+  const [isAuth, setIsAuth] = useState(hasStoredAdminSession);
 
   useEffect(() => {
-    // Check Supabase session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        // Also verify admin_users table
-        supabase.from('admin_users')
+    let active = true;
+
+    const verifySession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!active) return;
+
+        if (!session) {
+          sessionStorage.removeItem("bnc_admin_auth");
+          sessionStorage.removeItem("bnc_admin_email");
+          setIsAuth(false);
+          setLoading(false);
+          return;
+        }
+
+        const { data } = await supabase.from('admin_users')
           .select('hr_name, role, email')
           .eq('auth_id', session.user.id)
           .eq('is_active', true)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data) {
-              // Ensure sessionStorage is populated (useful if user refreshed or returned to a persisted session)
-              if (!sessionStorage.getItem("bnc_admin_role")) {
-                sessionStorage.setItem("bnc_admin_role", data.role || "hr");
-              }
-              if (!sessionStorage.getItem("bnc_admin_name")) {
-                sessionStorage.setItem("bnc_admin_name", data.hr_name || data.email);
-              }
-              if (!sessionStorage.getItem("bnc_admin_id")) {
-                sessionStorage.setItem("bnc_admin_id", data.email);
-              }
-              setIsAuth(true);
-            } else {
-              setIsAuth(false);
-            }
-            setLoading(false);
-          });
-      } else {
-        setIsAuth(false);
-        setLoading(false);
+          .maybeSingle();
+
+        if (!active) return;
+
+        if (data) {
+          sessionStorage.setItem("bnc_admin_auth", "true");
+          sessionStorage.setItem("bnc_admin_role", data.role || "hr");
+          sessionStorage.setItem("bnc_admin_name", data.hr_name || data.email);
+          sessionStorage.setItem("bnc_admin_id", data.email);
+          sessionStorage.setItem("bnc_admin_email", data.email || session.user.email || "");
+          setIsAuth(true);
+        } else {
+          sessionStorage.removeItem("bnc_admin_auth");
+          sessionStorage.removeItem("bnc_admin_email");
+          setIsAuth(false);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-    });
+    };
+
+    verifySession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
+        sessionStorage.removeItem("bnc_admin_auth");
+        sessionStorage.removeItem("bnc_admin_email");
         setIsAuth(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {

@@ -17,26 +17,21 @@ export default function AdminClientJobDetail() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [jobs, allShortlists, allApplicants] = await Promise.all([
-          jobService.fetchClientJobs(),
-          jobService.getShortlistedCandidates(),
-          jobService.getDatabaseCandidates()
-        ]);
-
-        const foundJob = jobs.find(j => j.jobCode === jobCode);
+        const foundJob = await jobService.fetchClientJobByCode(jobCode);
         setJob(foundJob || null);
 
         if (foundJob) {
-          // Filter shortlists for this job
-          const matches = allShortlists.filter(s => s.jobCode === jobCode);
-
-          // Enrich with full applicant data
-          const enriched = matches.map(m => {
-            const fullData = allApplicants.find(a => a.applicantId === m.applicantId);
-            return { ...m, ...fullData };
-          });
+          const matches = await jobService.fetchShortlistedCandidatesByJob(jobCode);
+          const applicants = await jobService.fetchApplicantsByIds(matches.map((item) => item.applicantId));
+          const applicantMap = new Map(applicants.map((applicant) => [applicant.applicantId, applicant]));
+          const enriched = matches.map((match) => ({
+            ...match,
+            ...(applicantMap.get(match.applicantId) || {})
+          }));
 
           setShortlistedForJob(enriched);
+        } else {
+          setShortlistedForJob([]);
         }
       } catch (err) {
         console.error('Failed to load job detail or submissions', err);
@@ -139,7 +134,7 @@ export default function AdminClientJobDetail() {
         <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '0 0 24px 0' }} />
 
         {/* Info Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', alignItems: 'center', paddingLeft: '44px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', alignItems: 'center', paddingLeft: '44px' }}>
           {/* Column 1: Client Reporting Contact (Moved Left First) */}
           <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Client Reporting Contact</div>
@@ -172,14 +167,21 @@ export default function AdminClientJobDetail() {
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.recruitmentManager || '—'}</div>
           </div>
 
-          {/* Column 4: Created By & On */}
+          {/* Column 4: Job Type / Mode */}
+          <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
+            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Job Type / Mode</div>
+            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.jobType || '-'}</div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{job.jobMode || '-'}</div>
+          </div>
+
+          {/* Column 5: Created By & On */}
           <div style={{ borderRight: '1px solid #e2e8f0', padding: '0 16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Created By & On</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.createdBy}</div>
             <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>On {formatDate(job.createdOn)}</div>
           </div>
 
-          {/* Column 5: Business Unit */}
+          {/* Column 6: Business Unit */}
           <div style={{ paddingLeft: '16px' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>Business Unit</div>
             <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>{job.businessUnit || 'Broccoli and Carrots Global Services'}</div>

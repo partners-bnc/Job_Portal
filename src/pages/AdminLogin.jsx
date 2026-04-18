@@ -23,6 +23,7 @@ export default function AdminLogin() {
       if (result.success) {
         sessionStorage.setItem("bnc_admin_auth", "true");
         sessionStorage.setItem("bnc_admin_id", result.loginId || loginId);
+        sessionStorage.setItem("bnc_admin_email", result.loginId || loginId);
         sessionStorage.setItem("bnc_admin_name", result.hrName || result.loginId || loginId);
         sessionStorage.setItem("bnc_admin_role", result.role || "hr");
         navigate("/admin");
@@ -231,6 +232,27 @@ export default function AdminLogin() {
                 Verifying...
               </span>
             ) : "Sign in to Dashboard"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={{
+              width: "100%",
+              padding: "13px",
+              background: "#ffffff",
+              color: "#0b2f5b",
+              border: "1.5px solid #d7dee8",
+              borderRadius: "12px",
+              fontSize: "14px",
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.2s",
+              fontFamily: "inherit",
+              marginTop: "12px",
+            }}
+          >
+            Home Page
           </button>
         </form>
 

@@ -105,6 +105,7 @@ export default function AdminLayout() {
     await jobService.adminLogout();
     sessionStorage.removeItem("bnc_admin_auth");
     sessionStorage.removeItem("bnc_admin_id");
+    sessionStorage.removeItem("bnc_admin_email");
     sessionStorage.removeItem("bnc_admin_name");
     sessionStorage.removeItem("bnc_admin_role");
     navigate("/admin/login");
@@ -168,24 +169,88 @@ export default function AdminLayout() {
 
         {/* Brand */}
         <div style={{
-          padding: sidebarOpen ? "16px 20px 12px" : "16px 12px 12px",
+          padding: sidebarOpen ? "18px 18px 14px" : "18px 12px 14px",
           borderBottom: "1px solid rgba(255,255,255,0.1)",
-          display: "flex", alignItems: "center", gap: "12px"
+          display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "space-between" : "center", gap: "12px"
         }}>
-          <div style={{
-            width: "36px", height: "36px", flexShrink: 0, borderRadius: "10px",
-            background: "rgba(99, 88, 220, 0.15)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer"
-          }} onClick={() => setSidebarOpen(v => !v)}>
-            <svg width="20" height="20" fill="#312e81" viewBox="0 0 24 24">
-              <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
-            </svg>
-          </div>
-          {sidebarOpen && (
-            <div>
-              <div style={{ color: "#312e81", fontWeight: 700, fontSize: "15px", lineHeight: 1.2 }}>Ciedeck</div>
-              <div style={{ color: "rgba(49, 46, 129, 0.6)", fontSize: "11px", fontWeight: 600 }}>Admin Panel</div>
+          {sidebarOpen ? (
+            <>
+              <div style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 0
+              }}>
+                <img
+                  src="/logo.png"
+                  alt="Ciedeck"
+                  style={{
+                    height: "52px",
+                    width: "auto",
+                    maxWidth: "150px",
+                    objectFit: "contain",
+                    display: "block"
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                aria-label="Collapse sidebar"
+                onClick={() => setSidebarOpen(v => !v)}
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  flexShrink: 0,
+                  borderRadius: "10px",
+                  border: "1px solid rgba(49,46,129,0.14)",
+                  background: "rgba(255,255,255,0.65)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "#312e81"
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+              <img
+                src="/fabicon.png"
+                alt="Ciedeck icon"
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  objectFit: "contain",
+                  display: "block"
+                }}
+              />
+              <button
+                type="button"
+                aria-label="Expand sidebar"
+                onClick={() => setSidebarOpen(v => !v)}
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  flexShrink: 0,
+                  borderRadius: "12px",
+                  border: "1px solid rgba(49,46,129,0.14)",
+                  background: "rgba(255,255,255,0.72)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "#312e81"
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="m8.59 16.59 1.41 1.41L16 12 10 6 8.59 7.41 13.17 12z" />
+                </svg>
+              </button>
             </div>
           )}
         </div>

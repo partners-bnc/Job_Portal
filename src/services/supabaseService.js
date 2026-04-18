@@ -2,6 +2,8 @@ import { supabase, SUPABASE_URL } from './supabaseClient.js';
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const SUPABASE_PAGE_SIZE = 1000;
+const CACHE_PREFIX = 'bnc_job_cache_v3';
+const inflightRequests = new Map();
 const cache = {
   jobs: { data: null, timestamp: 0 },
   candidates: { data: null, timestamp: 0 },
@@ -9,15 +11,332 @@ const cache = {
   shortlisted: { data: null, timestamp: 0 },
   clients: { data: null, timestamp: 0 },
   clientJobs: { data: null, timestamp: 0 },
-  hrs: { data: null, timestamp: 0 }
+  hrs: { data: null, timestamp: 0 },
+  dashboardSummary: { data: null, timestamp: 0 },
+  dashboardAnalytics: { data: null, timestamp: 0 }
 };
+
+const APPLICANT_LIST_COLUMNS = [
+  'id',
+  'applicant_code',
+  'source',
+  'full_name',
+  'email',
+  'mobile_number',
+  'current_location',
+  'current_company',
+  'current_position',
+  'total_experience',
+  'education',
+  'skills',
+  'job_applied_for',
+  'job_id',
+  'resume_link',
+  'uploaded_by',
+  'created_on',
+  'status',
+  'ai_score',
+  'shortlist_decision',
+  'shortlist_reason',
+  'certification',
+  'relevant_experience',
+  'current_ctc',
+  'expected_pay',
+  'notice_period',
+  'process_knowledge',
+  'reason_for_change',
+  'work_authorization',
+  'recruiter_comments',
+  'last_viewed_by'
+].join(',');
+
+const APPLICANT_DETAIL_COLUMNS = [
+  APPLICANT_LIST_COLUMNS,
+  'cv_summary',
+  'ai_analysis',
+  'aadhar_number',
+  'nationality',
+  'language_details',
+  'technical_rating',
+  'communication_rating',
+  'professionalism_rating',
+  'overall_rating'
+].join(',');
+
+function canUseStorage() {
+  return typeof window !== 'undefined' && !!window.sessionStorage;
+}
+
+function readCacheEntry(key) {
+  const memoryEntry = cache[key];
+  if (memoryEntry?.data && Date.now() - memoryEntry.timestamp < CACHE_DURATION) {
+    return memoryEntry.data;
+  }
+
+  if (!canUseStorage()) return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(`${CACHE_PREFIX}:${key}`);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed?.timestamp || Date.now() - parsed.timestamp >= CACHE_DURATION) {
+      window.sessionStorage.removeItem(`${CACHE_PREFIX}:${key}`);
+      return null;
+    }
+
+    if (memoryEntry) {
+      cache[key] = parsed;
+    }
+    return parsed.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCacheEntry(key, data) {
+  const entry = { data, timestamp: Date.now() };
+  if (cache[key]) {
+    cache[key] = entry;
+  }
+
+  if (!canUseStorage()) return;
+
+  try {
+    window.sessionStorage.setItem(`${CACHE_PREFIX}:${key}`, JSON.stringify(entry));
+  } catch {
+    // Ignore storage quota errors and keep using in-memory cache.
+  }
+}
+
+function removeCacheEntry(key) {
+  if (cache[key]) {
+    cache[key] = { data: null, timestamp: 0 };
+  }
+  inflightRequests.delete(key);
+
+  if (!canUseStorage()) return;
+
+  try {
+    window.sessionStorage.removeItem(`${CACHE_PREFIX}:${key}`);
+  } catch {
+    // Ignore storage cleanup errors.
+  }
+}
+
+async function withCache(key, loader) {
+  const cached = readCacheEntry(key);
+  if (cached) return cached;
+
+  if (inflightRequests.has(key)) {
+    return inflightRequests.get(key);
+  }
+
+  const request = (async () => {
+    try {
+      const data = await loader();
+      writeCacheEntry(key, data);
+      return data;
+    } finally {
+      inflightRequests.delete(key);
+    }
+  })();
+
+  inflightRequests.set(key, request);
+  return request;
+}
+
+function mapApplicantRow(r) {
+  return {
+    applicantId: r.applicant_code || '',
+    _uuid: r.id,
+    source: r.source || '',
+    name: r.full_name || '',
+    email: r.email || '',
+    contactNumber: r.mobile_number || '',
+    currentLocation: r.current_location || '',
+    currentCompany: r.current_company || '',
+    currentPosition: r.current_position || '',
+    totalExperience: r.total_experience || '',
+    education: r.education || '',
+    skills: r.skills || '',
+    summary: r.cv_summary || '',
+    jobAppliedFor: r.job_applied_for || '',
+    jobId: r.job_id || '',
+    resumeLink: r.resume_link || '',
+    uploadedBy: r.uploaded_by || '',
+    createdOn: r.created_on || '',
+    aiScore: r.ai_score,
+    aiAnalysis: r.ai_analysis || '',
+    shortlistDecision: r.shortlist_decision || '',
+    shortlistReason: r.shortlist_reason || '',
+    status: r.status || 'Applied',
+    certification: r.certification || '',
+    relevantExperience: r.relevant_experience || '',
+    currentCTC: r.current_ctc || '',
+    expectedPay: r.expected_pay || '',
+    noticePeriod: r.notice_period || '',
+    processKnowledge: r.process_knowledge || '',
+    reasonForChange: r.reason_for_change || '',
+    workAuthorization: r.work_authorization || '',
+    recruiterComments: r.recruiter_comments || '',
+    aadharNumber: r.aadhar_number || '',
+    nationality: r.nationality || '',
+    language: r.language_details || '',
+    technicalRating: r.technical_rating ?? '',
+    communicationRating: r.communication_rating ?? '',
+    professionalismRating: r.professionalism_rating ?? '',
+    overallRating: r.overall_rating ?? '',
+    lastViewedBy: r.last_viewed_by || ''
+  };
+}
+
+function sanitizeSearchTerm(value) {
+  return (value || '').replace(/[,%()]/g, ' ').trim();
+}
+
+function buildIlikeOrFilter(columns, value) {
+  const term = sanitizeSearchTerm(value);
+  if (!term) return '';
+  return columns.map(column => `${column}.ilike.%${term}%`).join(',');
+}
+
+function mapShortlistRow(s) {
+  return {
+    applicantId: s.applicant_code || '',
+    name: s.name || '',
+    jobRole: s.job_role || '',
+    company: s.company || '',
+    shortlistedBy: s.shortlisted_by || '',
+    date: s.created_at || null,
+    jobCode: s.job_code || '',
+    currentStage: s.current_stage || 'Pipeline',
+    managerSubmittedAt: s.manager_submitted_at || null,
+    clientSubmittedAt: s.client_submitted_at || null,
+    feedbackReceivedAt: s.feedback_received_at || null,
+    shortlistedOn: s.created_at || null,
+    id: s.id
+  };
+}
+
+function mapClientRow(c) {
+  return {
+    clientId: c.client_id || '',
+    clientName: c.client_name || '',
+    website: c.website || '',
+    industry: c.industry || '',
+    status: c.status || '',
+    primaryOwner: c.managed_by || '',
+    businessUnit: c.business_unit || '',
+    displayOnJobPosting: c.display_on_job_posting || '',
+    reportingContacts: (c.client_reporting_contact || []).map((rc) => ({
+      id: rc.id,
+      name: rc.contact_name,
+      email: rc.email,
+      contact: rc.phone,
+      department: rc.department || ''
+    })),
+    reportingContactsCount: Array.isArray(c.client_reporting_contact)
+      ? c.client_reporting_contact.length
+      : (c.reporting_contacts_count || 0),
+    createdBy: c.created_by || '',
+    createdOn: c.created_on || '',
+    modifiedOn: c.modified_on || '',
+    modifiedBy: c.modified_by || '',
+  };
+}
+
+function mapClientJobRow(j) {
+  return {
+    jobCode: j.job_code || '',
+    jobTitle: j.job_title || '',
+    jobType: j.job_type || '',
+    jobMode: j.job_mode || '',
+    businessUnit: j.business_unit || '',
+    clientName: j.client_name || '',
+    clientId: j.client_id || '',
+    location: j.location || '',
+    state: j.state || '',
+    country: j.country || '',
+    payRate: j.pay_rate || '',
+    experience: j.experience || '',
+    jobDescription: j.job_description || '',
+    createdBy: j.created_by || '',
+    createdOn: j.created_on || '',
+    recruitmentManager: j.recruitment_manager || '',
+    status: j.status || '',
+    modifiedOn: j.modified_on || '',
+    modifiedBy: j.modified_by || '',
+    priority: j.priority || 'Medium',
+    assignedTo: j.assigned_to || '',
+    reportingClientName: j.reporting_client_name || '',
+    reportingClientEmail: j.reporting_client_email || '',
+    reportingClientContact: j.reporting_client_contact || '',
+  };
+}
+
+function resolveTaggedDateRange({ dateFrom = '', dateTo = '', periodYear = '', periodMonth = '' } = {}) {
+  let start = dateFrom ? `${dateFrom}T00:00:00` : '';
+  let end = dateTo ? `${dateTo}T23:59:59.999` : '';
+
+  if (periodYear) {
+    start = `${periodYear}-01-01T00:00:00`;
+    end = `${periodYear}-12-31T23:59:59.999`;
+  }
+
+  if (periodMonth) {
+    const [year, month] = periodMonth.split('-').map((value) => parseInt(value, 10));
+    const lastDay = new Date(year, month, 0).getDate();
+    start = `${periodMonth}-01T00:00:00`;
+    end = `${periodMonth}-${String(lastDay).padStart(2, '0')}T23:59:59.999`;
+  }
+
+  return { start, end };
+}
+
+async function fetchAllLightweightRows(table, columns) {
+  const rows = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .range(from, to);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    rows.push(...data);
+
+    if (data.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return rows;
+}
+
+async function fetchJobContactsByCodes(jobCodes = []) {
+  const uniqueCodes = Array.from(new Set((jobCodes || []).filter(Boolean)));
+  if (!uniqueCodes.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('client_jobs')
+    .select('job_code, reporting_client_name')
+    .in('job_code', uniqueCodes);
+
+  if (error) throw error;
+
+  return new Map((data || []).map((job) => [job.job_code || '', job.reporting_client_name || '']));
+}
 
 export const jobService = {
   clearCache(key) {
     if (key && cache[key]) {
-      cache[key] = { data: null, timestamp: 0 };
+      removeCacheEntry(key);
     } else {
-      Object.keys(cache).forEach(k => cache[k] = { data: null, timestamp: 0 });
+      Object.keys(cache).forEach(removeCacheEntry);
     }
   },
 
@@ -71,26 +390,23 @@ export const jobService = {
   // JOBS (Public Job Listings)
   // ─────────────────────────────────────────────
   async fetchJobs() {
-    if (cache.jobs.data && Date.now() - cache.jobs.timestamp < CACHE_DURATION) {
-      return cache.jobs.data;
-    }
     try {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+      return await withCache('jobs', async () => {
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('id, job_id, title, location, job_type, experience, salary, education, vacancy, gender, description')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      const jobs = (data || []).map(j => ({
-        id: j.job_id, title: j.title, location: j.location,
-        type: j.job_type, experience: j.experience, salary: j.salary,
-        education: j.education, vacancy: j.vacancy, gender: j.gender,
-        description: j.description, company: 'BnC Global',
-        _uuid: j.id,
-      }));
-      cache.jobs = { data: jobs, timestamp: Date.now() };
-      return jobs;
+        if (error) throw error;
+        return (data || []).map(j => ({
+          id: j.job_id, title: j.title, location: j.location,
+          type: j.job_type, experience: j.experience, salary: j.salary,
+          education: j.education, vacancy: j.vacancy, gender: j.gender,
+          description: j.description, company: 'BnC Global',
+          _uuid: j.id,
+        }));
+      });
     } catch (error) {
       console.error('Error fetching jobs:', error);
       return [];
@@ -300,30 +616,27 @@ export const jobService = {
   // CANDIDATES (from Candidate detail sheet equivalent)
   // ─────────────────────────────────────────────
   async fetchCandidates() {
-    if (cache.candidates.data && Date.now() - cache.candidates.timestamp < CACHE_DURATION) {
-      return cache.candidates.data;
-    }
     try {
-      const { data, error } = await supabase
-        .from('candidates')
-        .select('*')
-        .order('timestamp', { ascending: false });
+      return await withCache('candidates', async () => {
+        const { data, error } = await supabase
+          .from('candidates')
+          .select('timestamp, name, email, contact_number, current_location, recent_education, total_experience, current_company, current_position, current_ctc, expected_ctc, notice_period, job_applied, resume_link, email_status, status, ai_score, ai_analysis, shortlist_decision, shortlist_reason')
+          .order('timestamp', { ascending: false });
 
-      if (error) throw error;
-      const candidates = (data || []).map(c => ({
-        timestamp: c.timestamp || '', name: c.name || '', email: c.email || '',
-        contactNumber: c.contact_number || '', currentLocation: c.current_location || '',
-        recentEducation: c.recent_education || '', totalExperience: c.total_experience || '',
-        currentCompany: c.current_company || '', currentPosition: c.current_position || '',
-        currentCTC: c.current_ctc || '', expectedCTC: c.expected_ctc || '',
-        noticePeriod: c.notice_period || '', jobApplied: c.job_applied || '',
-        resumeLink: c.resume_link || '', emailStatus: c.email_status || '',
-        status: c.status || 'Applied',
-        aiScore: c.ai_score, aiAnalysis: c.ai_analysis || '',
-        shortlistDecision: c.shortlist_decision || '', shortlistReason: c.shortlist_reason || '',
-      }));
-      cache.candidates = { data: candidates, timestamp: Date.now() };
-      return candidates;
+        if (error) throw error;
+        return (data || []).map(c => ({
+          timestamp: c.timestamp || '', name: c.name || '', email: c.email || '',
+          contactNumber: c.contact_number || '', currentLocation: c.current_location || '',
+          recentEducation: c.recent_education || '', totalExperience: c.total_experience || '',
+          currentCompany: c.current_company || '', currentPosition: c.current_position || '',
+          currentCTC: c.current_ctc || '', expectedCTC: c.expected_ctc || '',
+          noticePeriod: c.notice_period || '', jobApplied: c.job_applied || '',
+          resumeLink: c.resume_link || '', emailStatus: c.email_status || '',
+          status: c.status || 'Applied',
+          aiScore: c.ai_score, aiAnalysis: c.ai_analysis || '',
+          shortlistDecision: c.shortlist_decision || '', shortlistReason: c.shortlist_reason || '',
+        }));
+      });
     } catch (error) {
       console.error('Error fetching candidates:', error);
       return [];
@@ -450,77 +763,165 @@ export const jobService = {
   // DATABASE CANDIDATES (Applicants — centralised)
   // ─────────────────────────────────────────────
   async getDatabaseCandidates() {
-    if (cache.databaseCandidates.data && Date.now() - cache.databaseCandidates.timestamp < CACHE_DURATION) {
-      return cache.databaseCandidates.data;
-    }
     try {
-      const rows = [];
-      let from = 0;
+      return await withCache('databaseCandidates', async () => {
+        const rows = [];
+        let from = 0;
 
-      while (true) {
-        const to = from + SUPABASE_PAGE_SIZE - 1;
-        const { data, error } = await supabase
-          .from('applicants')
-          .select('*')
-          .order('created_on', { ascending: false })
-          .range(from, to);
+        while (true) {
+          const to = from + SUPABASE_PAGE_SIZE - 1;
+          const { data, error } = await supabase
+            .from('applicants')
+            .select(APPLICANT_LIST_COLUMNS)
+            .order('created_on', { ascending: false })
+            .range(from, to);
 
-        if (error) throw error;
-        if (!data?.length) break;
+          if (error) throw error;
+          if (!data?.length) break;
 
-        rows.push(...data);
+          rows.push(...data);
 
-        if (data.length < SUPABASE_PAGE_SIZE) break;
-        from += SUPABASE_PAGE_SIZE;
-      }
+          if (data.length < SUPABASE_PAGE_SIZE) break;
+          from += SUPABASE_PAGE_SIZE;
+        }
 
-      const candidates = rows.map(r => ({
-        applicantId: r.applicant_code || '', _uuid: r.id,
-        timestamp: r.timestamp || '', source: r.source || '',
-        name: r.full_name || '', email: r.email || '',
-        contactNumber: r.mobile_number || '',
-        currentLocation: r.current_location || '',
-        currentCompany: r.current_company || '',
-        currentPosition: r.current_position || '',
-        totalExperience: r.total_experience || '',
-        education: r.education || '', skills: r.skills || '',
-        summary: r.cv_summary || '', jobAppliedFor: r.job_applied_for || '',
-        jobId: r.job_id || '', resumeLink: r.resume_link || '',
-        uploadedBy: r.uploaded_by || '',
-        createdOn: r.created_on || '',
-        aiScore: r.ai_score, aiAnalysis: r.ai_analysis || '',
-        shortlistDecision: r.shortlist_decision || '',
-        shortlistReason: r.shortlist_reason || '',
-        status: r.status || 'Applied',
-        certification: r.certification || '',
-        relevantExperience: r.relevant_experience || '',
-        currentCTC: r.current_ctc || '', expectedPay: r.expected_pay || '',
-        noticePeriod: r.notice_period || '',
-        processKnowledge: r.process_knowledge || '',
-        reasonForChange: r.reason_for_change || '',
-        workAuthorization: r.work_authorization || '',
-        recruiterComments: r.recruiter_comments || '',
-        aadharNumber: r.aadhar_number || '',
-        nationality: r.nationality || '',
-        language: r.language_details || '',
-        technicalRating: r.technical_rating ?? '',
-        communicationRating: r.communication_rating ?? '',
-        professionalismRating: r.professionalism_rating ?? '',
-        overallRating: r.overall_rating ?? '',
-        lastViewedBy: r.last_viewed_by || '',
-      }));
-      cache.databaseCandidates = { data: candidates, timestamp: Date.now() };
-      return candidates;
+        return rows.map(mapApplicantRow);
+      });
     } catch (error) {
       console.error('Error fetching database candidates:', error);
       return [];
     }
   },
 
+  async fetchApplicantsPage(options = {}) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      searchHr = '',
+      searchDate = '',
+      filterSource = '',
+      filterStatus = '',
+      filterAI = '',
+      filterExp = '',
+      filterDateFrom = '',
+      filterDateTo = '',
+      filterJobTitle = '',
+      filterSkills = '',
+      sortKey = 'createdOn',
+      sortDirection = 'desc'
+    } = options;
+
+    const sortMap = {
+      applicantId: 'applicant_code',
+      name: 'full_name',
+      contactNumber: 'mobile_number',
+      currentPosition: 'current_position',
+      source: 'source',
+      uploadedBy: 'uploaded_by',
+      totalExperience: 'total_experience',
+      status: 'status',
+      createdOn: 'created_on'
+    };
+
+    try {
+      let query = supabase
+        .from('applicants')
+        .select(APPLICANT_LIST_COLUMNS, { count: 'exact' });
+
+      const globalSearch = buildIlikeOrFilter(
+        ['full_name', 'email', 'mobile_number', 'skills', 'current_position', 'job_applied_for', 'current_company'],
+        search
+      );
+      if (globalSearch) query = query.or(globalSearch);
+
+      if (searchHr) query = query.ilike('uploaded_by', `%${sanitizeSearchTerm(searchHr)}%`);
+      if (searchDate) query = query.gte('created_on', `${searchDate}T00:00:00`).lt('created_on', `${searchDate}T23:59:59.999`);
+      if (filterSource) query = query.ilike('source', `${sanitizeSearchTerm(filterSource)}%`);
+      if (filterStatus) query = query.eq('status', filterStatus);
+      if (filterAI) query = query.eq('shortlist_decision', filterAI);
+      if (filterExp) query = query.eq('total_experience', filterExp);
+      if (filterDateFrom) query = query.gte('created_on', `${filterDateFrom}T00:00:00`);
+      if (filterDateTo) query = query.lte('created_on', `${filterDateTo}T23:59:59.999`);
+      if (filterJobTitle) {
+        const jobTitleFilter = buildIlikeOrFilter(['job_applied_for', 'current_position'], filterJobTitle);
+        if (jobTitleFilter) query = query.or(jobTitleFilter);
+      }
+
+      const skillTerms = sanitizeSearchTerm(filterSkills)
+        .split(' ')
+        .join(',')
+        .split(',')
+        .map(term => term.trim())
+        .filter(Boolean);
+
+      skillTerms.forEach((term) => {
+        query = query.ilike('skills', `%${term}%`);
+      });
+
+      const sortColumn = sortMap[sortKey] || 'created_on';
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await query
+        .order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      return {
+        data: (data || []).map(mapApplicantRow),
+        total: count || 0
+      };
+    } catch (error) {
+      console.error('Error fetching paginated applicants:', error);
+      return { data: [], total: 0 };
+    }
+  },
+
+  async fetchApplicantsByIds(applicantIds = []) {
+    const ids = Array.from(new Set((applicantIds || []).filter(Boolean)));
+    if (ids.length === 0) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('applicants')
+        .select(APPLICANT_LIST_COLUMNS)
+        .in('applicant_code', ids);
+
+      if (error) throw error;
+      return (data || []).map(mapApplicantRow);
+    } catch (error) {
+      console.error('Error fetching applicants by ids:', error);
+      return [];
+    }
+  },
+
   async getDatabaseCandidateById(applicantId) {
     try {
-      const all = await this.getDatabaseCandidates();
-      return all.find(c => c.applicantId.toString() === applicantId.toString()) || null;
+      const cachedList = readCacheEntry('databaseCandidates');
+      const cachedCandidate = cachedList?.find(c => c.applicantId.toString() === applicantId.toString());
+      if (cachedCandidate?.summary && cachedCandidate?.aiAnalysis) {
+        return cachedCandidate;
+      }
+
+      const { data, error } = await supabase
+        .from('applicants')
+        .select(APPLICANT_DETAIL_COLUMNS)
+        .eq('applicant_code', applicantId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+
+      const candidate = mapApplicantRow(data);
+      if (cachedList) {
+        const idx = cachedList.findIndex(c => c.applicantId.toString() === applicantId.toString());
+        if (idx !== -1) {
+          cachedList[idx] = { ...cachedList[idx], ...candidate };
+          writeCacheEntry('databaseCandidates', cachedList);
+        }
+      }
+      return candidate;
     } catch (error) {
       return null;
     }
@@ -737,29 +1138,177 @@ export const jobService = {
   },
 
   async getShortlistedCandidates() {
-    if (cache.shortlisted.data && Date.now() - cache.shortlisted.timestamp < CACHE_DURATION) {
-      return cache.shortlisted.data;
-    }
     try {
-      const { data, error } = await supabase.from('tagged_candidates')
-        .select('*').order('created_at', { ascending: false });
+      return await withCache('shortlisted', async () => {
+        const { data, error } = await supabase.from('tagged_candidates')
+          .select('id, applicant_code, name, job_role, company, shortlisted_by, created_at, job_code, current_stage, manager_submitted_at, client_submitted_at, feedback_received_at')
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      const items = (data || []).map(s => ({
-        applicantId: s.applicant_code || '',
-        name: s.name || '', jobRole: s.job_role || '',
-        company: s.company || '', shortlistedBy: s.shortlisted_by || '',
-        date: s.created_at || null, jobCode: s.job_code || '',
-        currentStage: s.current_stage || 'Pipeline',
-        managerSubmittedAt: s.manager_submitted_at || null,
-        clientSubmittedAt: s.client_submitted_at || null,
-        feedbackReceivedAt: s.feedback_received_at || null,
-        id: s.id
-      }));
-      cache.shortlisted = { data: items, timestamp: Date.now() };
-      return items;
+        if (error) throw error;
+        return (data || []).map(mapShortlistRow);
+      });
     } catch (error) {
       console.error('Error fetching shortlisted:', error);
+      return [];
+    }
+  },
+
+  async fetchTaggedCandidatesPage(options = {}) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = '',
+      dateFrom = '',
+      dateTo = '',
+      periodYear = '',
+      periodMonth = '',
+      taggedBy = '',
+      targetCompany = '',
+      targetContact = ''
+    } = options;
+
+    try {
+      let contactJobCodes = null;
+      if (targetContact) {
+        const { data: matchedJobs, error: matchedJobsError } = await supabase
+          .from('client_jobs')
+          .select('job_code')
+          .ilike('reporting_client_name', `%${sanitizeSearchTerm(targetContact)}%`);
+
+        if (matchedJobsError) throw matchedJobsError;
+        contactJobCodes = (matchedJobs || []).map((job) => job.job_code).filter(Boolean);
+        if (!contactJobCodes.length) {
+          return { data: [], total: 0 };
+        }
+      }
+
+      let query = supabase
+        .from('tagged_candidates')
+        .select('id, applicant_code, name, job_role, company, shortlisted_by, created_at, job_code, current_stage, manager_submitted_at, client_submitted_at, feedback_received_at', { count: 'exact' });
+
+      const searchFilter = buildIlikeOrFilter(
+        ['name', 'job_role', 'company', 'shortlisted_by', 'job_code', 'applicant_code'],
+        search
+      );
+      if (searchFilter) query = query.or(searchFilter);
+      if (taggedBy) query = query.ilike('shortlisted_by', `%${sanitizeSearchTerm(taggedBy)}%`);
+      if (targetCompany) query = query.ilike('company', `%${sanitizeSearchTerm(targetCompany)}%`);
+      if (contactJobCodes?.length) query = query.in('job_code', contactJobCodes);
+
+      const { start, end } = resolveTaggedDateRange({ dateFrom, dateTo, periodYear, periodMonth });
+      if (start) query = query.gte('created_at', start);
+      if (end) query = query.lte('created_at', end);
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      const jobContacts = await fetchJobContactsByCodes((data || []).map((item) => item.job_code));
+
+      return {
+        data: (data || []).map((item) => ({
+          ...mapShortlistRow(item),
+          contactName: jobContacts.get(item.job_code || '') || ''
+        })),
+        total: count || 0
+      };
+    } catch (error) {
+      console.error('Error fetching paginated shortlisted candidates:', error);
+      return { data: [], total: 0 };
+    }
+  },
+
+  async exportTaggedCandidates(options = {}) {
+    const {
+      search = '',
+      dateFrom = '',
+      dateTo = '',
+      periodYear = '',
+      periodMonth = '',
+      taggedBy = '',
+      targetCompany = '',
+      targetContact = ''
+    } = options;
+
+    try {
+      let contactJobCodes = null;
+      if (targetContact) {
+        const { data: matchedJobs, error: matchedJobsError } = await supabase
+          .from('client_jobs')
+          .select('job_code')
+          .ilike('reporting_client_name', `%${sanitizeSearchTerm(targetContact)}%`);
+
+        if (matchedJobsError) throw matchedJobsError;
+        contactJobCodes = (matchedJobs || []).map((job) => job.job_code).filter(Boolean);
+        if (!contactJobCodes.length) return [];
+      }
+
+      const rows = [];
+      let from = 0;
+
+      while (true) {
+        let query = supabase
+          .from('tagged_candidates')
+          .select('id, applicant_code, name, job_role, company, shortlisted_by, created_at, job_code, current_stage, manager_submitted_at, client_submitted_at, feedback_received_at')
+          .order('created_at', { ascending: false })
+          .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+        const searchFilter = buildIlikeOrFilter(
+          ['name', 'job_role', 'company', 'shortlisted_by', 'job_code', 'applicant_code'],
+          search
+        );
+        if (searchFilter) query = query.or(searchFilter);
+        if (taggedBy) query = query.ilike('shortlisted_by', `%${sanitizeSearchTerm(taggedBy)}%`);
+        if (targetCompany) query = query.ilike('company', `%${sanitizeSearchTerm(targetCompany)}%`);
+        if (contactJobCodes?.length) query = query.in('job_code', contactJobCodes);
+
+        const { start, end } = resolveTaggedDateRange({ dateFrom, dateTo, periodYear, periodMonth });
+        if (start) query = query.gte('created_at', start);
+        if (end) query = query.lte('created_at', end);
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data?.length) break;
+
+        rows.push(...data);
+        if (data.length < SUPABASE_PAGE_SIZE) break;
+        from += SUPABASE_PAGE_SIZE;
+      }
+
+      const jobContacts = await fetchJobContactsByCodes(rows.map((item) => item.job_code));
+      return rows.map((item) => ({
+        ...mapShortlistRow(item),
+        contactName: jobContacts.get(item.job_code || '') || ''
+      }));
+    } catch (error) {
+      console.error('Error exporting tagged candidates:', error);
+      return [];
+    }
+  },
+
+  async fetchShortlistedCandidatesByJob(jobCode) {
+    if (!jobCode) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('tagged_candidates')
+        .select('id, applicant_code, name, job_role, company, shortlisted_by, created_at, job_code, current_stage, manager_submitted_at, client_submitted_at, feedback_received_at')
+        .eq('job_code', jobCode)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      const jobContacts = await fetchJobContactsByCodes([jobCode]);
+      return (data || []).map((item) => ({
+        ...mapShortlistRow(item),
+        contactName: jobContacts.get(item.job_code || '') || ''
+      }));
+    } catch (error) {
+      console.error('Error fetching shortlisted candidates by job:', error);
       return [];
     }
   },
@@ -789,35 +1338,79 @@ export const jobService = {
   // CLIENTS
   // ─────────────────────────────────────────────
   async fetchClients() {
-    if (cache.clients.data && Date.now() - cache.clients.timestamp < CACHE_DURATION) {
-      return cache.clients.data;
-    }
     try {
-      const { data, error } = await supabase.from('clients')
-        .select('*, client_reporting_contact(*)').order('created_on', { ascending: false });
+      return await withCache('clients', async () => {
+        const { data, error } = await supabase.from('clients')
+          .select('client_id, client_name, website, industry, status, managed_by, business_unit, display_on_job_posting, created_by, created_on, modified_on, modified_by, client_reporting_contact(id, contact_name, email, phone, department)')
+          .order('created_on', { ascending: false });
 
-      if (error) throw error;
-      const clients = (data || []).map(c => ({
-        clientId: c.client_id, clientName: c.client_name || '',
-        website: c.website || '', industry: c.industry || '',
-        status: c.status || '', primaryOwner: c.managed_by || '',
-        businessUnit: c.business_unit || '',
-        displayOnJobPosting: c.display_on_job_posting || '',
-        reportingContacts: (c.client_reporting_contact || []).map(rc => ({
-           id: rc.id,
-           name: rc.contact_name,
-           email: rc.email,
-           contact: rc.phone,
-           department: rc.department || ''
-        })),
-        createdBy: c.created_by || '', createdOn: c.created_on || '',
-        modifiedOn: c.modified_on || '', modifiedBy: c.modified_by || '',
-      }));
-      cache.clients = { data: clients, timestamp: Date.now() };
-      return clients;
+        if (error) throw error;
+        return (data || []).map(mapClientRow);
+      });
     } catch (error) {
       console.error('Error fetching clients:', error);
       return [];
+    }
+  },
+
+  async fetchClientsPage(options = {}) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = ''
+    } = options;
+
+    try {
+      let query = supabase
+        .from('clients')
+        .select('client_id, client_name, website, industry, status, managed_by, business_unit, display_on_job_posting, created_by, created_on, modified_on, modified_by, client_reporting_contact(id)', { count: 'exact' });
+
+      const searchFilter = buildIlikeOrFilter(
+        ['client_id', 'client_name', 'industry', 'managed_by', 'business_unit'],
+        search
+      );
+      if (searchFilter) query = query.or(searchFilter);
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await query
+        .order('created_on', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      return {
+        data: (data || []).map(mapClientRow),
+        total: count || 0
+      };
+    } catch (error) {
+      console.error('Error fetching paginated clients:', error);
+      return { data: [], total: 0 };
+    }
+  },
+
+  async fetchClientById(clientId) {
+    if (!clientId) return null;
+
+    try {
+      const cachedClients = readCacheEntry('clients');
+      const cachedClient = cachedClients?.find((client) => client.clientId === clientId);
+      if (cachedClient?.reportingContacts?.length) {
+        return cachedClient;
+      }
+
+      const { data, error } = await supabase
+        .from('clients')
+        .select('client_id, client_name, website, industry, status, managed_by, business_unit, display_on_job_posting, created_by, created_on, modified_on, modified_by, client_reporting_contact(id, contact_name, email, phone, department)')
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return mapClientRow(data);
+    } catch (error) {
+      console.error('Error fetching client by id:', error);
+      return null;
     }
   },
 
@@ -908,17 +1501,14 @@ export const jobService = {
   // HRs (Admin Users)
   // ─────────────────────────────────────────────
   async fetchHRs() {
-    if (cache.hrs.data && Date.now() - cache.hrs.timestamp < CACHE_DURATION) {
-      return cache.hrs.data;
-    }
     try {
-      const { data, error } = await supabase.from('admin_users')
-        .select('hr_name, email').eq('is_active', true);
+      return await withCache('hrs', async () => {
+        const { data, error } = await supabase.from('admin_users')
+          .select('hr_name, email').eq('is_active', true);
 
-      if (error) throw error;
-      const hrs = (data || []).map(h => ({ hrName: h.hr_name, email: h.email }));
-      cache.hrs = { data: hrs, timestamp: Date.now() };
-      return hrs;
+        if (error) throw error;
+        return (data || []).map(h => ({ hrName: h.hr_name, email: h.email }));
+      });
     } catch (error) {
       console.error('Error fetching HRs:', error);
       return [];
@@ -929,62 +1519,254 @@ export const jobService = {
   // CLIENT JOBS
   // ─────────────────────────────────────────────
   async fetchClientJobs() {
-    if (cache.clientJobs.data && Date.now() - cache.clientJobs.timestamp < CACHE_DURATION) {
-      return cache.clientJobs.data;
-    }
-
-    const processJob = (j) => ({
-      jobCode: j.job_code || '', jobTitle: j.job_title || '',
-      businessUnit: j.business_unit || '', clientName: j.client_name || '',
-      clientId: j.client_id || '', location: j.location || '',
-      state: j.state || '', country: j.country || '',
-      payRate: j.pay_rate || '', experience: j.experience || '',
-      jobDescription: j.job_description || '',
-      createdBy: j.created_by || '', createdOn: j.created_on || '',
-      recruitmentManager: j.recruitment_manager || '',
-      status: j.status || '', modifiedOn: j.modified_on || '',
-      modifiedBy: j.modified_by || '', priority: j.priority || 'Medium',
-      assignedTo: j.assigned_to || '',
-      reportingClientName: j.reporting_client_name || '',
-      reportingClientEmail: j.reporting_client_email || '',
-      reportingClientContact: j.reporting_client_contact || '',
-    });
-
     try {
-      const { data, error } = await supabase.from('client_jobs')
-        .select(`
-          *,
-          reporting_contacts:client_id (
-            contact_name,
-            email,
-            phone
-          )
-        `).order('created_on', { ascending: false });
+      return await withCache('clientJobs', async () => {
+        const { data, error } = await supabase.from('client_jobs')
+          .select('job_code, job_title, job_type, job_mode, business_unit, client_name, client_id, location, state, country, pay_rate, experience, job_description, created_by, created_on, recruitment_manager, status, modified_on, modified_by, priority, assigned_to, reporting_client_name, reporting_client_email, reporting_client_contact')
+          .order('created_on', { ascending: false });
 
-      if (error) {
-        console.warn('Relational fetch failed, falling back to flat fetch:', error.message);
-        const { data: flatData, error: flatError } = await supabase.from('client_jobs').select('*').order('created_on', { ascending: false });
-        if (flatError) throw flatError;
-        const jobs = (flatData || []).map(processJob);
-        cache.clientJobs = { data: jobs, timestamp: Date.now() };
-        return jobs;
-      }
-
-      const jobs = (data || []).map(j => {
-        const base = processJob(j);
-        if (j.reporting_contacts) {
-          base.reportingClientName = j.reporting_contacts.contact_name || base.reportingClientName;
-          base.reportingClientEmail = j.reporting_contacts.email || base.reportingClientEmail;
-          base.reportingClientContact = j.reporting_contacts.phone || base.reportingClientContact;
-        }
-        return base;
+        if (error) throw error;
+        return (data || []).map(mapClientJobRow);
       });
-
-      cache.clientJobs = { data: jobs, timestamp: Date.now() };
-      return jobs;
     } catch (error) {
       console.error('Error fetching client jobs:', error);
       return [];
+    }
+  },
+
+  async fetchClientJobsPage(options = {}) {
+    const {
+      page = 1,
+      pageSize = 25,
+      search = ''
+    } = options;
+
+    try {
+      let query = supabase
+        .from('client_jobs')
+        .select('job_code, job_title, job_type, job_mode, business_unit, client_name, client_id, location, state, country, pay_rate, experience, created_by, created_on, recruitment_manager, status, modified_on, modified_by, priority, assigned_to, reporting_client_name, reporting_client_email, reporting_client_contact', { count: 'exact' });
+
+      const searchFilter = buildIlikeOrFilter(
+        ['job_code', 'job_title', 'job_type', 'job_mode', 'client_name', 'recruitment_manager', 'location', 'state', 'country'],
+        search
+      );
+      if (searchFilter) query = query.or(searchFilter);
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await query
+        .order('created_on', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      return {
+        data: (data || []).map(mapClientJobRow),
+        total: count || 0
+      };
+    } catch (error) {
+      console.error('Error fetching paginated client jobs:', error);
+      return { data: [], total: 0 };
+    }
+  },
+
+  async fetchClientJobByCode(jobCode) {
+    if (!jobCode) return null;
+
+    try {
+      const cachedJobs = readCacheEntry('clientJobs');
+      const cachedJob = cachedJobs?.find((job) => job.jobCode === jobCode);
+      if (cachedJob?.jobDescription) {
+        return cachedJob;
+      }
+
+      const { data, error } = await supabase
+        .from('client_jobs')
+        .select('job_code, job_title, job_type, job_mode, business_unit, client_name, client_id, location, state, country, pay_rate, experience, job_description, created_by, created_on, recruitment_manager, status, modified_on, modified_by, priority, assigned_to, reporting_client_name, reporting_client_email, reporting_client_contact')
+        .eq('job_code', jobCode)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return mapClientJobRow(data);
+    } catch (error) {
+      console.error('Error fetching client job by code:', error);
+      return null;
+    }
+  },
+
+  async fetchNextClientJobCode() {
+    try {
+      const { data, error } = await supabase
+        .from('client_jobs')
+        .select('job_code')
+        .order('created_on', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+
+      const nextNumber = (data || [])
+        .map((job) => {
+          const match = job.job_code?.match(/JPC-(\d+)/i);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .reduce((max, value) => Math.max(max, value), 0) + 1;
+
+      return `JPC-${String(nextNumber).padStart(3, '0')}`;
+    } catch (error) {
+      console.error('Error fetching next client job code:', error);
+      return 'JPC-001';
+    }
+  },
+
+  async fetchRecentCandidates(limit = 5) {
+    try {
+      const { data, error } = await supabase
+        .from('candidates')
+        .select('timestamp, name, email, current_location, total_experience, job_applied, status')
+        .order('timestamp', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return (data || []).map(c => ({
+        timestamp: c.timestamp || '',
+        name: c.name || '',
+        email: c.email || '',
+        currentLocation: c.current_location || '',
+        totalExperience: c.total_experience || '',
+        jobApplied: c.job_applied || '',
+        status: c.status || 'Applied'
+      }));
+    } catch (error) {
+      console.error('Error fetching recent candidates:', error);
+      return [];
+    }
+  },
+
+  async fetchActiveClientJobsPreview(limit = 6) {
+    try {
+      const { data, error } = await supabase
+        .from('client_jobs')
+        .select('job_code, job_title, client_name, created_by, status')
+        .eq('status', 'Active')
+        .order('created_on', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return (data || []).map(j => ({
+        jobCode: j.job_code || '',
+        jobTitle: j.job_title || '',
+        clientName: j.client_name || '',
+        createdBy: j.created_by || '',
+        status: j.status || 'Active'
+      }));
+    } catch (error) {
+      console.error('Error fetching active client job preview:', error);
+      return [];
+    }
+  },
+
+  async fetchDashboardSummary() {
+    try {
+      return await withCache('dashboardSummary', async () => {
+        const now = new Date();
+        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+        const [
+          jobsCountRes,
+          candidatesCountRes,
+          applicationsTodayRes,
+          aiShortlistedRes,
+          applicantsCountRes,
+          monthCvUploadRes,
+          shortlistedCountRes,
+          clientsCountRes,
+          activeClientJobsCountRes,
+          recentCandidates,
+          activeClientJobs
+        ] = await Promise.all([
+          supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('is_active', true),
+          supabase.from('candidates').select('*', { count: 'exact', head: true }),
+          supabase.from('candidates').select('*', { count: 'exact', head: true }).gte('timestamp', dayStart),
+          supabase.from('candidates').select('*', { count: 'exact', head: true }).eq('shortlist_decision', 'Shortlisted'),
+          supabase.from('applicants').select('*', { count: 'exact', head: true }),
+          supabase.from('applicants').select('*', { count: 'exact', head: true }).gte('created_on', monthStart),
+          supabase.from('tagged_candidates').select('*', { count: 'exact', head: true }),
+          supabase.from('clients').select('*', { count: 'exact', head: true }),
+          supabase.from('client_jobs').select('*', { count: 'exact', head: true }).eq('status', 'Active'),
+          this.fetchRecentCandidates(5),
+          this.fetchActiveClientJobsPreview(6)
+        ]);
+
+        return {
+          stats: {
+            activeJobs: jobsCountRes.count || 0,
+            totalCandidates: candidatesCountRes.count || 0,
+            applicationsToday: applicationsTodayRes.count || 0,
+            aiShortlisted: aiShortlistedRes.count || 0,
+            totalApplicants: applicantsCountRes.count || 0,
+            taggedCandidates: shortlistedCountRes.count || 0,
+            monthCvUpload: monthCvUploadRes.count || 0,
+            totalClients: clientsCountRes.count || 0,
+            activeClientJobs: activeClientJobsCountRes.count || 0
+          },
+          recentCandidates,
+          activeClientJobs
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard summary:', error);
+      return {
+        stats: {
+          activeJobs: 0,
+          totalCandidates: 0,
+          applicationsToday: 0,
+          aiShortlisted: 0,
+          totalApplicants: 0,
+          taggedCandidates: 0,
+          monthCvUpload: 0,
+          totalClients: 0,
+          activeClientJobs: 0
+        },
+        recentCandidates: [],
+        activeClientJobs: []
+      };
+    }
+  },
+
+  async fetchDashboardAnalytics() {
+    try {
+      return await withCache('dashboardAnalytics', async () => {
+        const [applicantsData, shortlistedData, logsData] = await Promise.all([
+          fetchAllLightweightRows('applicants', 'source, uploaded_by, created_on'),
+          fetchAllLightweightRows('tagged_candidates', 'shortlisted_by, created_at, job_code'),
+          fetchAllLightweightRows('communication_logs', 'hr_name, created_at')
+        ]);
+
+        return {
+          dbCandidates: (applicantsData || []).map(candidate => ({
+            source: candidate.source || '',
+            uploadedBy: candidate.uploaded_by || '',
+            createdOn: candidate.created_on || ''
+          })),
+          shortlisted: (shortlistedData || []).map(item => ({
+            shortlistedBy: item.shortlisted_by || '',
+            date: item.created_at || null,
+            jobCode: item.job_code || ''
+          })),
+          clientJobs: [],
+          commLogs: logsData || []
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard analytics:', error);
+      return {
+        dbCandidates: [],
+        shortlisted: [],
+        clientJobs: [],
+        commLogs: []
+      };
     }
   },
 
@@ -993,6 +1775,8 @@ export const jobService = {
       const { data, error } = await supabase.from('client_jobs').insert({
         job_code: jobData.jobCode || '',
         job_title: jobData.jobTitle || '',
+        job_type: jobData.jobType || '',
+        job_mode: jobData.jobMode || '',
         business_unit: jobData.businessUnit || '',
         client_name: jobData.clientName || '',
         client_id: jobData.clientId || '',
@@ -1023,7 +1807,8 @@ export const jobService = {
   async updateClientJob(jobData) {
     try {
       const { error } = await supabase.from('client_jobs').update({
-        job_title: jobData.jobTitle, business_unit: jobData.businessUnit,
+        job_title: jobData.jobTitle, job_type: jobData.jobType,
+        job_mode: jobData.jobMode, business_unit: jobData.businessUnit,
         client_name: jobData.clientName, client_id: jobData.clientId,
         location: jobData.location, state: jobData.state,
         country: jobData.country, pay_rate: jobData.payRate,
