@@ -27,7 +27,8 @@ function StatCard({ icon, label, value, color, bg }) {
 export default function AdminDashboard() {
   const [summary, setSummary] = useState(null);
   const [analytics, setAnalytics] = useState({
-    dbCandidates: [],
+    hrDailyStats: [],
+    sourceStats: [],
     shortlisted: [],
     commLogs: [],
     clientJobs: []
@@ -68,50 +69,21 @@ export default function AdminDashboard() {
   const hrStats = useMemo(() => {
     const stats = {};
 
-    analytics.dbCandidates.forEach(candidate => {
-      if (hrDateFilter) {
-        const d = new Date(candidate.createdOn);
-        if (isNaN(d.getTime()) || d.toISOString().split("T")[0] !== hrDateFilter) return;
-      }
-      const hr = candidate.uploadedBy || "Portal / Unknown";
+    analytics.hrDailyStats.forEach(row => {
+      if (hrDateFilter && row.date !== hrDateFilter) return;
+      const hr = row.hr || "Portal / Unknown";
       if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0, calls: 0 };
-      stats[hr].uploaded += 1;
-    });
-
-    analytics.shortlisted.forEach(item => {
-      if (hrDateFilter) {
-        const d = new Date(item.date);
-        if (isNaN(d.getTime()) || d.toISOString().split("T")[0] !== hrDateFilter) return;
-      }
-      const hr = item.shortlistedBy || "Portal / Unknown";
-      if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0, calls: 0 };
-      stats[hr].tagged += 1;
-    });
-
-    analytics.commLogs.forEach(log => {
-      if (hrDateFilter) {
-        const d = new Date(log.created_at);
-        if (isNaN(d.getTime()) || d.toISOString().split("T")[0] !== hrDateFilter) return;
-      }
-      if (!log.hr_name) return;
-      const hr = log.hr_name;
-      if (!stats[hr]) stats[hr] = { uploaded: 0, tagged: 0, calls: 0 };
-      stats[hr].calls += 1;
+      stats[hr].uploaded += row.uploaded || 0;
+      stats[hr].tagged += row.tagged || 0;
+      stats[hr].calls += row.calls || 0;
     });
 
     return Object.entries(stats).sort((a, b) => b[1].uploaded - a[1].uploaded);
   }, [analytics, hrDateFilter]);
 
   const sourceStats = useMemo(() => {
-    const stats = {};
-    analytics.dbCandidates.forEach(candidate => {
-      const source = candidate.source || "Portal / Unknown";
-      stats[source] = (stats[source] || 0) + 1;
-    });
-    return Object.entries(stats)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [analytics.dbCandidates]);
+    return (analytics.sourceStats || []).sort((a, b) => b.value - a.value);
+  }, [analytics.sourceStats]);
 
   const COLORS = ["#0b2f5b", "#059669", "#d97706", "#7c3aed", "#db2777", "#2563eb", "#ea580c"];
   const stats = summary?.stats || {

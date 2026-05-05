@@ -27,6 +27,8 @@ Thumbs.db
 # Project-specific files
 .dockerignore
 Dockerfile
+__pycache__/
+*.pyc
 batch001_first100_results.json
 failed_results.json
 realtime-body.json
@@ -38,3 +40,10 @@ test100_summary.json
 upsert_summary.json
 vertex-batch-request.json
 vertex_realtime_results.json
+
+.gcloudignore
+.playwright-mcp/
+Dockerfile.resume-enqueue-launcher
+Dockerfile.resume-queue-worker
+
+scripts/

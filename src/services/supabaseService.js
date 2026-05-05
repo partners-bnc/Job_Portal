@@ -201,6 +201,66 @@ function buildIlikeOrFilter(columns, value) {
   return columns.map(column => `${column}.ilike.%${term}%`).join(',');
 }
 
+const APPLICANT_SORT_MAP = {
+  applicantId: 'applicant_code',
+  name: 'full_name',
+  contactNumber: 'mobile_number',
+  currentPosition: 'current_position',
+  source: 'source',
+  uploadedBy: 'uploaded_by',
+  totalExperience: 'total_experience',
+  status: 'status',
+  createdOn: 'created_on'
+};
+
+function applyApplicantFilters(query, options = {}) {
+  const {
+    search = '',
+    searchHr = '',
+    searchDate = '',
+    filterSource = '',
+    filterStatus = '',
+    filterAI = '',
+    filterExp = '',
+    filterDateFrom = '',
+    filterDateTo = '',
+    filterJobTitle = '',
+    filterSkills = ''
+  } = options;
+
+  const globalSearch = buildIlikeOrFilter(
+    ['full_name', 'email', 'mobile_number', 'skills', 'current_position', 'job_applied_for', 'current_company'],
+    search
+  );
+  if (globalSearch) query = query.or(globalSearch);
+
+  if (searchHr) query = query.ilike('uploaded_by', `%${sanitizeSearchTerm(searchHr)}%`);
+  if (searchDate) query = query.gte('created_on', `${searchDate}T00:00:00`).lt('created_on', `${searchDate}T23:59:59.999`);
+  if (filterSource) query = query.ilike('source', `${sanitizeSearchTerm(filterSource)}%`);
+  if (filterStatus) query = query.eq('status', filterStatus);
+  if (filterAI) query = query.eq('shortlist_decision', filterAI);
+  if (filterExp) query = query.eq('total_experience', filterExp);
+  if (filterDateFrom) query = query.gte('created_on', `${filterDateFrom}T00:00:00`);
+  if (filterDateTo) query = query.lte('created_on', `${filterDateTo}T23:59:59.999`);
+  if (filterJobTitle) {
+    const jobTitleFilter = buildIlikeOrFilter(['job_applied_for', 'current_position'], filterJobTitle);
+    if (jobTitleFilter) query = query.or(jobTitleFilter);
+  }
+
+  const skillTerms = sanitizeSearchTerm(filterSkills)
+    .split(' ')
+    .join(',')
+    .split(',')
+    .map(term => term.trim())
+    .filter(Boolean);
+
+  skillTerms.forEach((term) => {
+    query = query.ilike('skills', `%${term}%`);
+  });
+
+  return query;
+}
+
 function mapShortlistRow(s) {
   return {
     applicantId: s.applicant_code || '',
@@ -797,85 +857,48 @@ export const jobService = {
     const {
       page = 1,
       pageSize = 25,
-      search = '',
-      searchHr = '',
-      searchDate = '',
-      filterSource = '',
-      filterStatus = '',
-      filterAI = '',
-      filterExp = '',
-      filterDateFrom = '',
-      filterDateTo = '',
-      filterJobTitle = '',
-      filterSkills = '',
       sortKey = 'createdOn',
       sortDirection = 'desc'
     } = options;
 
-    const sortMap = {
-      applicantId: 'applicant_code',
-      name: 'full_name',
-      contactNumber: 'mobile_number',
-      currentPosition: 'current_position',
-      source: 'source',
-      uploadedBy: 'uploaded_by',
-      totalExperience: 'total_experience',
-      status: 'status',
-      createdOn: 'created_on'
-    };
-
     try {
-      let query = supabase
-        .from('applicants')
-        .select(APPLICANT_LIST_COLUMNS, { count: 'exact' });
-
-      const globalSearch = buildIlikeOrFilter(
-        ['full_name', 'email', 'mobile_number', 'skills', 'current_position', 'job_applied_for', 'current_company'],
-        search
+      let query = applyApplicantFilters(
+        supabase.from('applicants').select(APPLICANT_LIST_COLUMNS),
+        options
       );
-      if (globalSearch) query = query.or(globalSearch);
-
-      if (searchHr) query = query.ilike('uploaded_by', `%${sanitizeSearchTerm(searchHr)}%`);
-      if (searchDate) query = query.gte('created_on', `${searchDate}T00:00:00`).lt('created_on', `${searchDate}T23:59:59.999`);
-      if (filterSource) query = query.ilike('source', `${sanitizeSearchTerm(filterSource)}%`);
-      if (filterStatus) query = query.eq('status', filterStatus);
-      if (filterAI) query = query.eq('shortlist_decision', filterAI);
-      if (filterExp) query = query.eq('total_experience', filterExp);
-      if (filterDateFrom) query = query.gte('created_on', `${filterDateFrom}T00:00:00`);
-      if (filterDateTo) query = query.lte('created_on', `${filterDateTo}T23:59:59.999`);
-      if (filterJobTitle) {
-        const jobTitleFilter = buildIlikeOrFilter(['job_applied_for', 'current_position'], filterJobTitle);
-        if (jobTitleFilter) query = query.or(jobTitleFilter);
-      }
-
-      const skillTerms = sanitizeSearchTerm(filterSkills)
-        .split(' ')
-        .join(',')
-        .split(',')
-        .map(term => term.trim())
-        .filter(Boolean);
-
-      skillTerms.forEach((term) => {
-        query = query.ilike('skills', `%${term}%`);
-      });
-
-      const sortColumn = sortMap[sortKey] || 'created_on';
+      const sortColumn = APPLICANT_SORT_MAP[sortKey] || 'created_on';
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
-      const { data, error, count } = await query
-        .order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false })
+      const { data, error } = await query
+        .order(sortColumn, { ascending: sortDirection === 'asc' })
         .range(from, to);
 
       if (error) throw error;
 
       return {
         data: (data || []).map(mapApplicantRow),
-        total: count || 0
+        total: null
       };
     } catch (error) {
       console.error('Error fetching paginated applicants:', error);
       return { data: [], total: 0 };
+    }
+  },
+
+  async fetchApplicantsCount(options = {}) {
+    try {
+      const query = applyApplicantFilters(
+        supabase.from('applicants').select('id', { count: 'exact', head: true }),
+        options
+      );
+      const { error, count } = await query;
+
+      if (error) throw error;
+      return { total: count || 0 };
+    } catch (error) {
+      console.error('Error fetching applicants count:', error);
+      return { total: 0 };
     }
   },
 
@@ -1738,31 +1761,45 @@ export const jobService = {
   async fetchDashboardAnalytics() {
     try {
       return await withCache('dashboardAnalytics', async () => {
-        const [applicantsData, shortlistedData, logsData] = await Promise.all([
-          fetchAllLightweightRows('applicants', 'source, uploaded_by, created_on'),
-          fetchAllLightweightRows('tagged_candidates', 'shortlisted_by, created_at, job_code'),
-          fetchAllLightweightRows('communication_logs', 'hr_name, created_at')
+        const [hrStatsRes, sourceStatsRes, taggedJobsData] = await Promise.all([
+          supabase
+            .from('dashboard_hr_daily_stats')
+            .select('stat_date, hr_name, uploaded_count, tagged_count, calls_count')
+            .order('stat_date', { ascending: false }),
+          supabase
+            .from('dashboard_source_stats')
+            .select('source, candidate_count')
+            .order('candidate_count', { ascending: false }),
+          fetchAllLightweightRows('tagged_candidates', 'job_code')
         ]);
 
+        if (hrStatsRes.error) throw hrStatsRes.error;
+        if (sourceStatsRes.error) throw sourceStatsRes.error;
+
         return {
-          dbCandidates: (applicantsData || []).map(candidate => ({
-            source: candidate.source || '',
-            uploadedBy: candidate.uploaded_by || '',
-            createdOn: candidate.created_on || ''
+          hrDailyStats: (hrStatsRes.data || []).map(row => ({
+            date: row.stat_date || '',
+            hr: row.hr_name || 'Portal / Unknown',
+            uploaded: row.uploaded_count || 0,
+            tagged: row.tagged_count || 0,
+            calls: row.calls_count || 0
           })),
-          shortlisted: (shortlistedData || []).map(item => ({
-            shortlistedBy: item.shortlisted_by || '',
-            date: item.created_at || null,
+          sourceStats: (sourceStatsRes.data || []).map(row => ({
+            name: row.source || 'Portal / Unknown',
+            value: row.candidate_count || 0
+          })),
+          shortlisted: (taggedJobsData || []).map(item => ({
             jobCode: item.job_code || ''
           })),
           clientJobs: [],
-          commLogs: logsData || []
+          commLogs: []
         };
       });
     } catch (error) {
       console.error('Error fetching dashboard analytics:', error);
       return {
-        dbCandidates: [],
+        hrDailyStats: [],
+        sourceStats: [],
         shortlisted: [],
         clientJobs: [],
         commLogs: []

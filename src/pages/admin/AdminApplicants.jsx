@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
 import { AdminTableSkeleton } from '../../Component/AdminSkeletons.jsx';
@@ -107,7 +107,11 @@ export default function AdminApplicants() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(null);
+  const [totalLoading, setTotalLoading] = useState(false);
+  const requestSeq = useRef(0);
+  const previousTextFilterKey = useRef(null);
+  const hasMountedFetch = useRef(false);
 
   const [search, setSearch] = useState('');
   const [searchHr, setSearchHr] = useState('');
@@ -127,44 +131,84 @@ export default function AdminApplicants() {
     filterExp || filterDateFrom || filterDateTo || filterJobTitle || filterSkills
   );
 
-  const fetchData = async (nextPage = page) => {
+  const buildFetchOptions = useCallback((nextPage = page) => ({
+    page: nextPage,
+    pageSize: PAGE_SIZE,
+    search,
+    searchHr,
+    searchDate,
+    filterSource,
+    filterStatus,
+    filterAI,
+    filterExp,
+    filterDateFrom,
+    filterDateTo,
+    filterJobTitle,
+    filterSkills,
+    sortKey: sortConfig.key,
+    sortDirection: sortConfig.direction
+  }), [
+    page,
+    search,
+    searchHr,
+    searchDate,
+    filterSource,
+    filterStatus,
+    filterAI,
+    filterExp,
+    filterDateFrom,
+    filterDateTo,
+    filterJobTitle,
+    filterSkills,
+    sortConfig
+  ]);
+
+  const fetchData = useCallback(async (nextPage = page) => {
+    const requestId = requestSeq.current + 1;
+    requestSeq.current = requestId;
     setLoading(true);
+    setTotalLoading(true);
+    setTotalCount(null);
     setError('');
+    const options = buildFetchOptions(nextPage);
+
     try {
-      const result = await jobService.fetchApplicantsPage({
-        page: nextPage,
-        pageSize: PAGE_SIZE,
-        search,
-        searchHr,
-        searchDate,
-        filterSource,
-        filterStatus,
-        filterAI,
-        filterExp,
-        filterDateFrom,
-        filterDateTo,
-        filterJobTitle,
-        filterSkills,
-        sortKey: sortConfig.key,
-        sortDirection: sortConfig.direction
-      });
+      const result = await jobService.fetchApplicantsPage(options);
+
+      if (requestSeq.current !== requestId) return;
 
       setCandidates(result.data || []);
-      setTotalCount(result.total || 0);
-    } catch (e) {
+      setLoading(false);
+
+      jobService.fetchApplicantsCount(options).then((countResult) => {
+        if (requestSeq.current !== requestId) return;
+        setTotalCount(countResult.total || 0);
+        setTotalLoading(false);
+      }).catch(() => {
+        if (requestSeq.current !== requestId) return;
+        setTotalLoading(false);
+      });
+    } catch {
+      if (requestSeq.current !== requestId) return;
       setError('Failed to load applicants. Please refresh.');
-    } finally {
+      setTotalLoading(false);
       setLoading(false);
     }
-  };
+  }, [buildFetchOptions, page]);
 
   useEffect(() => {
+    const textFilterKey = [search, searchHr, filterJobTitle, filterSkills].join('\u001f');
+    const shouldDebounce = hasMountedFetch.current && previousTextFilterKey.current !== textFilterKey;
+    previousTextFilterKey.current = textFilterKey;
+    hasMountedFetch.current = true;
+
     const timer = window.setTimeout(() => {
       fetchData(page);
-    }, 250);
+    }, shouldDebounce ? 250 : 0);
 
     return () => window.clearTimeout(timer);
   }, [
+    fetchData,
     page,
     search,
     searchHr,
@@ -216,7 +260,9 @@ export default function AdminApplicants() {
     boxSizing: 'border-box'
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const hasTotalCount = typeof totalCount === 'number';
+  const totalPages = hasTotalCount ? Math.max(1, Math.ceil(totalCount / PAGE_SIZE)) : page + (candidates.length === PAGE_SIZE ? 1 : 0);
+  const canGoNext = hasTotalCount ? page < totalPages : candidates.length === PAGE_SIZE;
 
   return (
     <div style={{ padding: '28px 30px' }}>
@@ -236,7 +282,7 @@ export default function AdminApplicants() {
           <div>
             <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#1e293b' }}>Applicants Database</h1>
             <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#94a3b8' }}>
-              {loading ? 'Loading...' : `${totalCount} total candidates`}
+              {loading ? 'Loading...' : hasTotalCount ? `${totalCount} total candidates` : totalLoading ? 'Loading total...' : 'Total unavailable'}
             </p>
           </div>
         </div>
@@ -390,7 +436,7 @@ export default function AdminApplicants() {
           <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
             <FiDatabase size={36} style={{ marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
             <div style={{ fontSize: '14px', fontWeight: 600 }}>
-              {totalCount === 0 ? 'No applicants in database yet.' : 'No results match your filters.'}
+              {hasTotalCount && totalCount === 0 ? 'No applicants in database yet.' : 'No results match your filters.'}
             </div>
           </div>
         ) : (
@@ -502,7 +548,7 @@ export default function AdminApplicants() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between'
           }}>
             <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-              Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount}
+              Showing {(page - 1) * PAGE_SIZE + 1}-{(page - 1) * PAGE_SIZE + candidates.length}{hasTotalCount ? ` of ${totalCount}` : totalLoading ? ' of ...' : ''}
             </span>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} style={{
@@ -510,7 +556,7 @@ export default function AdminApplicants() {
                 border: '1px solid #e2e8f0', background: '#fff', cursor: page === 1 ? 'not-allowed' : 'pointer',
                 color: page === 1 ? '#cbd5e1' : '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}><FiChevronLeft size={14} /></button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, offset) => {
+              {hasTotalCount && Array.from({ length: Math.min(5, totalPages) }, (_, offset) => {
                 const start = Math.max(1, Math.min(totalPages - 4, page - 2));
                 const pageNumber = start + offset;
                 return (
@@ -523,10 +569,10 @@ export default function AdminApplicants() {
                   }}>{pageNumber}</button>
                 );
               })}
-              <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} style={{
+              <button onClick={() => setPage((value) => value + 1)} disabled={!canGoNext} style={{
                 width: '32px', height: '32px', borderRadius: '8px',
-                border: '1px solid #e2e8f0', background: '#fff', cursor: page === totalPages ? 'not-allowed' : 'pointer',
-                color: page === totalPages ? '#cbd5e1' : '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                border: '1px solid #e2e8f0', background: '#fff', cursor: !canGoNext ? 'not-allowed' : 'pointer',
+                color: !canGoNext ? '#cbd5e1' : '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}><FiChevronRight size={14} /></button>
             </div>
           </div>
