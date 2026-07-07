@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { jobService } from '../../services/jobService.js';
-import { FiArrowLeft, FiMapPin, FiBriefcase, FiUser, FiClock, FiSearch, FiRefreshCw, FiFileText } from 'react-icons/fi';
+import { FiArrowLeft, FiMapPin, FiBriefcase, FiUser, FiClock, FiSearch, FiRefreshCw, FiFileText, FiDownload } from 'react-icons/fi';
 
 export default function AdminClientJobDetail() {
   const { jobCode } = useParams();
@@ -46,6 +46,163 @@ export default function AdminClientJobDetail() {
     if (!dateString) return '—';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleExport = () => {
+    if (!job) return;
+
+    const escapeXML = (val) => {
+      if (val === null || val === undefined) return '';
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    };
+
+    const getStyleByStage = (stage) => {
+      if (stage === 'Manager Submit') return 'StyleManagerSubmit';
+      if (stage === 'Client Submission') return 'StyleClientSubmission';
+      if (stage === 'Feedback') return 'StyleFeedback';
+      return 'StylePipeline';
+    };
+
+    const rawSheetName = `${job.jobCode} ${job.jobTitle || ''}`.trim();
+    const sanitizedSheetName = rawSheetName.replace(/[\\/?*:[\]]/g, ' ');
+    const finalSheetName = sanitizedSheetName.length > 31 ? sanitizedSheetName.slice(0, 31) : sanitizedSheetName;
+
+    const xmlContent = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Bottom"/>
+   <Borders/>
+   <Font ss:FontName="Calibri" x:CharSet="1" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
+   <Interior/>
+   <NumberFormat/>
+   <Protection/>
+  </Style>
+  <Style ss:ID="TableHeader">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#000000"/>
+   <Interior ss:Color="#CCE0F5" ss:Pattern="Solid"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6B9D0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6B9D0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6B9D0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6B9D0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="TableCell">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#333333"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="StylePipeline">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#475569"/>
+   <Interior ss:Color="#F1F5F9" ss:Pattern="Solid"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="StyleManagerSubmit">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#C2410C"/>
+   <Interior ss:Color="#FFF7ED" ss:Pattern="Solid"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDBA74"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDBA74"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDBA74"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDBA74"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="StyleClientSubmission">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#1E40AF"/>
+   <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BFDBFE"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BFDBFE"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BFDBFE"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BFDBFE"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="StyleFeedback">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#166534"/>
+   <Interior ss:Color="#F0FDF4" ss:Pattern="Solid"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+   </Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="${escapeXML(finalSheetName)}">
+  <Table>
+   <Column ss:Width="50"/>
+   <Column ss:Width="150"/>
+   <Column ss:Width="200"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="150"/>
+   <Column ss:Width="100"/>
+   <Column ss:Width="100"/>
+   <Column ss:Width="200"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="120"/>
+   <Row ss:Height="22">
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">S.No</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Candidate Name</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Email</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Mobile Number</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Location</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Current CTC</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Expected CTC</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Education</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Current Status</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Tagged By</Data></Cell>
+    <Cell ss:StyleID="TableHeader"><Data ss:Type="String">Tagged On</Data></Cell>
+   </Row>
+   ${shortlistedForJob.map((c, idx) => {
+     const firstColStyle = getStyleByStage(c.currentStage);
+     return `
+   <Row ss:Height="18">
+    <Cell ss:StyleID="${firstColStyle}"><Data ss:Type="String">${idx + 1}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.name || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.email || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.contactNumber || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.currentLocation || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.currentCTC || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.expectedPay || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.education || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.currentStage || 'Pipeline')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.shortlistedBy || 'N/A')}</Data></Cell>
+    <Cell ss:StyleID="TableCell"><Data ss:Type="String">${escapeXML(c.shortlistedOn ? formatDate(c.shortlistedOn) : (c.date ? formatDate(c.date) : 'N/A'))}</Data></Cell>
+   </Row>`;
+   }).join('')}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+    const blob = new Blob([xmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${job.jobCode}_Snapshot_${new Date().toISOString().slice(0, 10)}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (loading) {
@@ -222,19 +379,34 @@ export default function AdminClientJobDetail() {
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>Submissions</h2>
-          <button
-            onClick={() => navigate(`/admin/client-jobs/${jobCode}/email`)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '8px 18px', borderRadius: '8px', border: 'none',
-              background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700,
-              cursor: 'pointer', transition: 'background 0.2s'
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
-            onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
-          >
-            📧 Email Automation
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={handleExport}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 18px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                background: '#fff', color: '#334155', fontSize: '13px', fontWeight: 700,
+                cursor: 'pointer', transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+              onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+            >
+              <FiDownload size={14} /> Export Snapshot
+            </button>
+            <button
+              onClick={() => navigate(`/admin/client-jobs/${jobCode}/email`)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 18px', borderRadius: '8px', border: 'none',
+                background: '#3b82f6', color: '#fff', fontSize: '13px', fontWeight: 700,
+                cursor: 'pointer', transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
+              onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
+            >
+              📧 Email Automation
+            </button>
+          </div>
         </div>
 
         {/* Filter Pills */}

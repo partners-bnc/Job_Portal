@@ -104,7 +104,7 @@ function ScanBar({ parseProgress, label }) {
   );
 }
 
-function FieldRow({ icon, label, value, editable, onChange, multiline }) {
+function FieldRow({ icon, label, value, editable, onChange, multiline, required }) {
   const inputStyle = {
     width: '100%', border: '1px solid #e2e8f0', borderRadius: '8px',
     padding: '8px 10px', fontSize: '13px', outline: 'none',
@@ -114,7 +114,7 @@ function FieldRow({ icon, label, value, editable, onChange, multiline }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '8px', alignItems: 'start' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingTop: '9px', color: '#64748b', fontSize: '12px', fontWeight: 600 }}>
-        {icon} {label}
+        {icon} {label} {required && <span style={{ color: '#dc3545', marginLeft: '2px' }}>*</span>}
       </div>
       {editable ? (
         multiline
@@ -801,6 +801,261 @@ function BulkUpload({ adminName }) {
 }
 
 // ═══════════════════════════════════════════
+// MANUAL CV UPLOAD
+// ═══════════════════════════════════════════
+function ManualUpload({ adminName }) {
+  const [file, setFile] = useState(null);
+  const [source, setSource] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedId, setSavedId] = useState(null);
+  const [wasUpdate, setWasUpdate] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef();
+
+  const [formData, setFormData] = useState({
+    candidateName: '',
+    email: '',
+    contactNumber: '',
+    currentLocation: '',
+    currentCompany: '',
+    currentPosition: '',
+    totalExperience: '',
+    education: '',
+    skills: '',
+    certifications: '',
+    summary: '',
+  });
+
+  const handleFile = (f) => {
+    if (!f) { setFile(null); return; }
+    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowed.includes(f.type)) { setError('Only PDF, DOC, or DOCX files are allowed.'); return; }
+    if (f.size > 5 * 1024 * 1024) { setError('File must be under 5MB.'); return; }
+    setFile(f);
+    setError('');
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  };
+
+  const updateField = (key, val) => setFormData(prev => ({ ...prev, [key]: val }));
+
+  const handleSave = async () => {
+    if (!source) { setError('Please select a Source.'); return; }
+    if (!file) { setError('Please upload a CV/Resume file.'); return; }
+    if (!formData.candidateName.trim()) { setError('Full Name is required.'); return; }
+    if (!formData.email.trim()) { setError('Email is required.'); return; }
+    if (!formData.contactNumber.trim()) { setError('Mobile/Phone Number is required.'); return; }
+    
+    setIsSaving(true);
+    setError('');
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target.result.split(',')[1];
+        const result = await jobService.uploadCVToDatabase({
+          ...formData,
+          source,
+          uploadedBy: adminName,
+          resumeData: base64,
+          resumeFileName: file.name,
+        });
+        if (result.success) {
+          setSavedId(result.applicantId);
+          setWasUpdate(result.isUpdate === true);
+          setFile(null);
+          setSource('');
+          setFormData({
+            candidateName: '',
+            email: '',
+            contactNumber: '',
+            currentLocation: '',
+            currentCompany: '',
+            currentPosition: '',
+            totalExperience: '',
+            education: '',
+            skills: '',
+            certifications: '',
+            summary: '',
+          });
+        } else {
+          setError(result.error || 'Failed to save. Please try again.');
+        }
+        setIsSaving(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      setError('Error saving CV: ' + e.message);
+      setIsSaving(false);
+    }
+  };
+
+  if (savedId) {
+    const isUpdated = wasUpdate;
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 24px', animation: 'fadeIn 0.4s ease' }}>
+        <div style={{
+          width: '64px', height: '64px', borderRadius: '50%',
+          background: isUpdated
+            ? 'linear-gradient(135deg, #d97706, #f59e0b)'
+            : 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 16px', color: '#fff'
+        }}>
+          <FiCheckCircle size={28} />
+        </div>
+        <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>
+          {isUpdated ? 'Existing Record Updated!' : 'CV Saved Successfully!'}
+        </h3>
+        <div style={{
+          display: 'inline-block', margin: '8px 0 12px',
+          background: isUpdated
+            ? 'linear-gradient(135deg, #fffbeb, #fef3c7)'
+            : 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+          border: isUpdated ? '1px solid #fcd34d' : '1px solid #93c5fd',
+          borderRadius: '12px',
+          padding: '10px 24px', fontSize: '15px', fontWeight: 700,
+          color: isUpdated ? '#b45309' : '#1e40af'
+        }}>
+          Applicant ID: #{savedId}
+        </div>
+        <p style={{ color: '#64748b', fontSize: '13px', margin: '0 0 8px' }}>
+          {isUpdated
+            ? 'A matching candidate was found in the database. Their record has been updated with the latest data & resume.'
+            : 'The candidate has been added to the Database sheet.'}
+        </p>
+        <br />
+        <button onClick={() => { setSavedId(null); setWasUpdate(false); }} style={{
+          padding: '10px 24px', background: '#0B2F5B', color: '#fff',
+          border: 'none', borderRadius: '10px', cursor: 'pointer',
+          fontSize: '13px', fontWeight: 600
+        }}>
+          Upload/Add Another Candidate
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* File Upload Zone */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={e => e.preventDefault()}
+        onClick={() => !file && fileInputRef.current?.click()}
+        style={{
+          border: file ? '2px solid #0B2F5B40' : '2px dashed #d1d5db',
+          borderRadius: '14px', padding: file ? '14px 16px' : '24px 20px',
+          background: file ? '#f8fafc' : '#fafbfc',
+          cursor: file ? 'default' : 'pointer', textAlign: 'center',
+          transition: 'all 0.2s'
+        }}>
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx"
+          onChange={e => handleFile(e.target.files[0])}
+          style={{ display: 'none' }} />
+        {file ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
+              background: 'linear-gradient(135deg, #0B2F5B, #1a4a8a)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+            }}><FiFile size={18} /></div>
+            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+            </div>
+            <button onClick={e => { e.stopPropagation(); handleFile(null); }} style={{
+              width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #fecaca',
+              background: '#fff', color: '#dc3545', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}><FiX size={14} /></button>
+          </div>
+        ) : (
+          <>
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '12px', margin: '0 auto 8px',
+              background: '#0B2F5B10', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B2F5B'
+            }}><FiUpload size={18} /></div>
+            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#334155' }}>Upload CV (PDF, DOC, DOCX) <span style={{ color: '#dc3545' }}>*</span></p>
+            <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>Drop resume here or click to browse</p>
+          </>
+        )}
+      </div>
+
+      {/* Source & Uploaded By */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div>
+          <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>Source *</label>
+          <select value={source} onChange={e => setSource(e.target.value)} style={{
+            width: '100%', padding: '10px 12px', border: `1px solid #e2e8f0`,
+            borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', boxSizing: 'border-box'
+          }}>
+            <option value="">Select source...</option>
+            {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>Uploaded By</label>
+          <div style={{
+            padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px',
+            fontSize: '13px', color: '#1e293b', background: '#f8fafc',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <FiUser size={13} style={{ color: '#0B2F5B' }} />
+            {adminName}
+          </div>
+        </div>
+      </div>
+
+      {/* Manual details form */}
+      <div style={{
+        border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginTop: '4px'
+      }}>
+        <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 700, color: '#475569', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+          Candidate Information
+        </div>
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <FieldRow icon={<FiUser size={12} />} label="Full Name" value={formData.candidateName} required editable onChange={v => updateField('candidateName', v)} />
+          <FieldRow icon={<FiMail size={12} />} label="Email" value={formData.email} required editable onChange={v => updateField('email', v)} />
+          <FieldRow icon={<FiPhone size={12} />} label="Mobile" value={formData.contactNumber} required editable onChange={v => updateField('contactNumber', v)} />
+          <FieldRow icon={<FiMapPin size={12} />} label="Location" value={formData.currentLocation} editable onChange={v => updateField('currentLocation', v)} />
+          <FieldRow icon={<FiBriefcase size={12} />} label="Company" value={formData.currentCompany} editable onChange={v => updateField('currentCompany', v)} />
+          <FieldRow icon={<FiBriefcase size={12} />} label="Position" value={formData.currentPosition} editable onChange={v => updateField('currentPosition', v)} />
+          <FieldRow icon={<FiBriefcase size={12} />} label="Experience" value={formData.totalExperience} editable onChange={v => updateField('totalExperience', v)} />
+          <FieldRow icon={<FiBookOpen size={12} />} label="Education" value={formData.education} editable multiline onChange={v => updateField('education', v)} />
+          <FieldRow icon={<FiTag size={12} />} label="Skills" value={formData.skills} editable multiline onChange={v => updateField('skills', v)} />
+          <FieldRow icon={<FiAward size={12} />} label="Certifications" value={formData.certifications} editable multiline onChange={v => updateField('certifications', v)} />
+          <FieldRow icon={<FiAlignLeft size={12} />} label="Summary" value={formData.summary} editable multiline onChange={v => updateField('summary', v)} />
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+          <FiAlertCircle size={14} style={{ color: '#dc3545', flexShrink: 0 }} />
+          <span style={{ fontSize: '12px', color: '#dc2626' }}>{error}</span>
+        </div>
+      )}
+
+      {/* Save Button */}
+      <button onClick={handleSave} disabled={isSaving} style={{
+        marginTop: '8px', padding: '12px 20px', width: '100%',
+        background: isSaving ? '#94a3b8' : 'linear-gradient(135deg, #059669, #047857)',
+        color: '#fff', border: 'none', borderRadius: '10px', cursor: isSaving ? 'not-allowed' : 'pointer',
+        fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', gap: '8px'
+      }}>
+        {isSaving ? <><FiLoader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><FiCheck size={14} /> Submit & Save Candidate</>}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
 // MAIN PAGE
 // ═══════════════════════════════════════════
 export default function AdminCVUpload() {
@@ -852,15 +1107,17 @@ export default function AdminCVUpload() {
             <button style={tabStyle(mode === 'bulk')} onClick={() => setMode('bulk')}>
               <FiUpload size={15} /> <span>Bulk Upload</span>
             </button>
+            <button style={tabStyle(mode === 'manual')} onClick={() => setMode('manual')}>
+              <FiUser size={15} /> <span>Manual Upload</span>
+            </button>
           </div>
         </div>
 
         {/* Content */}
         <div style={{ padding: '22px 24px' }}>
-          {mode === 'single'
-            ? <SingleUpload adminName={adminName} key="single" />
-            : <BulkUpload adminName={adminName} key="bulk" />
-          }
+          {mode === 'single' && <SingleUpload adminName={adminName} key="single" />}
+          {mode === 'bulk' && <BulkUpload adminName={adminName} key="bulk" />}
+          {mode === 'manual' && <ManualUpload adminName={adminName} key="manual" />}
         </div>
       </div>
 
